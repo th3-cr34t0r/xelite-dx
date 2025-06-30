@@ -1,84 +1,111 @@
-use crate::{
-    views::{DbContact, DbPassword},
-    wallet::utils::NODE_ENDPOINT,
-    Route, WALLET,
-};
+use crate::{views::DbContact, wallet::utils::NODE_ENDPOINT, Route, DB, WALLET};
 use dioxus::{logger::tracing::info, prelude::*};
-// use dioxus_logger::tracing::info;
+use futures::TryStreamExt;
+use sqlx::{query, query_as, Error};
 
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
 #[component]
 pub fn Home() -> Element {
     let nav = navigator();
 
-    let mut address = use_signal(|| String::new());
     // gets the wallet address
+    let mut address = use_signal(|| String::new());
     use_future(move || async move {
         if let Some(wallet) = &*WALLET.read() {
             *address.write() = wallet.read().await.get_address().await;
         }
     });
 
+    //set wallet online
     let mut online_status = use_signal(|| String::new());
-    // gets the wallet connection status
     use_future(move || async move {
-        info!("Wallet online_status start");
         if let Some(wallet) = &*WALLET.read() {
-            if let Ok(_) = wallet
+            match wallet
                 .write()
                 .await
                 .set_online(NODE_ENDPOINT.to_string())
                 .await
             {
-                online_status.set("online".to_string());
-            } else {
-                online_status.set("offline".to_string());
+                Ok(_) => online_status.set("online".to_string()),
+                Err(e) => {
+                    if "Wallet is already in online mode" == e.to_string() {
+                        info!("set_online error: {e}");
+                        online_status.set("online".to_string());
+                    } else {
+                        info!("set_online error: {e}");
+                        online_status.set("offline".to_string());
+                    }
+                }
             };
         }
-        info!("Wallet online_status end");
     });
 
     let mut balance = use_signal(|| String::new());
-    // gets the wallet balance
+    let mut topoheight = use_signal(|| u64::MIN);
+    // gets the wallet info
     use_future(move || async move {
         if let Some(wallet) = &*WALLET.read() {
-            if let Ok(ret_balance) = wallet.read().await.get_balance().await {
+            if let Ok(ret_balance) = wallet.write().await.get_balance().await {
                 balance.set(ret_balance);
             };
+
+            topoheight.set(wallet.read().await.topoheight);
         }
     });
 
-    let mut contacts_vec = use_signal(|| {
-        vec![DbContact {
-            name: "".to_string(),
-            address: "".to_string(),
-        }]
-    });
+    let mut contacts_vec = use_signal(|| vec![DbContact::default()]);
     // read contacts from db
     use_future(move || async move {
-        // let ret_val = invoke("db_read_contacts", JsValue::null()).await;
+        if let Some(db) = &*DB.read() {
+            // create base table if it does not exist
+            query(
+                "CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )",
+            )
+            .execute(&*db)
+            .await
+            .expect("Cannot create contacts DB");
 
-        // let rx_contacts_vec: Vec<DbContact> = serde_wasm_bindgen::from_value(ret_val).unwrap();
+            let db_contacts: Result<Vec<DbContact>, Error> =
+                query_as("SELECT name, address FROM contacts")
+                    .fetch_all(&*db)
+                    .await;
 
-        // for contact in rx_contacts_vec.iter() {
-        //     contacts_vec.push(CopyValue::new(contact.clone()));
-        // }
+            match db_contacts {
+                Ok(mut db_contacts) => {
+                    while let Some(contact_from_db) = db_contacts.pop() {
+                        info!("{contact_from_db:?}");
+                        contacts_vec.write().push(DbContact {
+                            name: contact_from_db.name,
+                            address: contact_from_db.address,
+                        });
+                    }
+                }
+                Err(e) => {
+                    info!("DbContacts retrived with error {e}");
+                }
+            }
+        }
     });
 
-    let mut topoheight = use_signal(|| u64::MIN);
     // pool for new app events
     use_future(move || async move {
-        // let mut listener = listen::<u64>("new_topoheight_event").await.unwrap();
+        loop {
+            if let Some(wallet) = &*WALLET.read() {
+                wallet.write().await.backgroud_daemon().await;
 
-        // while let Some(event) = listener.next().await {
-        //     let Event {
-        //         event: _,
-        //         id: _,
-        //         payload,
-        //     } = event;
-        //     // store the new value
-        //     app_events.set(payload);
-        // }
+                // retrive the topoheight from the wallet
+                topoheight.set(wallet.read().await.topoheight);
+
+                // retrive the wallet balance
+                balance.set(wallet.read().await.balance.clone());
+            }
+        }
     });
+
     rsx!(
         div { "Home Screen" }
         div { "Wallet Address: {address.read()}"}
@@ -89,15 +116,23 @@ pub fn Home() -> Element {
         div {button {onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}}
 
         div {
-            for contact in contacts_vec().iter().cloned() {
-                div {
-                    button { onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}"}
+            for contact in contacts_vec.read().iter().cloned() {
+                // skip the default contact
+                if DbContact::default() != contact {
+                    div {
+                        button { onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}"}
+                    }
                 }
             }
         }
     )
 }
 
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
 #[component]
 pub fn AddContact() -> Element {
     let nav = navigator();
@@ -111,15 +146,71 @@ pub fn AddContact() -> Element {
         let name = contact_name.read().clone();
         let address = contact_address.read().clone();
 
-        // if !name.is_empty() && !address.is_empty() {
-        //     let args = serde_wasm_bindgen::to_value(&DbContact { address, name }).unwrap();
+        if !name.is_empty() && !address.is_empty() {
+            if let Some(db) = &*DB.read() {
+                // create base table if it does not exist
+                query(
+                "CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )",
+            )
+            .execute(&*db)
+            .await
+            .expect("Cannot create contacts DB");
 
-        //     if let Some(ret_info) = invoke("db_add_contact", args.clone()).await.as_string() {
-        //         contact_ret_msg.set(ret_info);
-        //     }
-        // } else {
-        //     contact_ret_msg.set("Name and address cannot be empty".to_string());
-        // }
+                let all_contacts: Result<Vec<DbContact>, Error> =
+                    query_as("SELECT * FROM contacts")
+                        .fetch(&*db)
+                        .try_collect()
+                        .await;
+
+                match all_contacts {
+                    Ok(all_contacts_vec) => {
+                        let ref_contact = DbContact {
+                            name: name.clone(),
+                            address: address.clone(),
+                        };
+
+                        let mut is_contained = false;
+
+                        // check if the name and address is already contained
+                        for contact in all_contacts_vec.iter() {
+                            if ref_contact == *contact {
+                                is_contained = true;
+                            }
+                        }
+
+                        if !is_contained {
+                            match query("INSERT INTO contacts (name, address) VALUES (?1, ?2)")
+                                .bind(name.as_str())
+                                .bind(address.as_str())
+                                .execute(&*db)
+                                .await
+                            {
+                                Ok(_) => {
+                                    info!("Contact successfully added");
+                                    contact_ret_msg.set("Contact successfully added".to_string());
+                                }
+                                Err(e) => {
+                                    info!("Error adding contact to db: {e}");
+                                    contact_ret_msg.set(
+                                        format!("Error adding contact to db: {}", e).to_string(),
+                                    );
+                                }
+                            }
+                        } else {
+                            info!("Contact already exists");
+
+                            contact_ret_msg.set("Contact already exists".to_string());
+                        }
+                    }
+                    Err(e) => {
+                        info!("{e}");
+                        contact_ret_msg.set(e.to_string());
+                    }
+                }
+            }
+        } else {
+            contact_ret_msg.set("Name and address cannot be empty".to_string());
+        }
     };
 
     rsx!(
@@ -155,6 +246,11 @@ pub fn AddContact() -> Element {
     )
 }
 
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
 #[component]
 pub fn ViewSeed() -> Element {
     let nav = navigator();

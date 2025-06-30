@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlx::prelude::FromRow;
 
 pub mod chat_view;
 pub mod home;
@@ -11,7 +12,7 @@ pub struct WalletCreateOpenArgs<'a> {
     password: &'a str,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, Eq, FromRow)]
 pub struct DbContact {
     name: String,
     address: String,

@@ -5,7 +5,7 @@ use dioxus::{logger::tracing::info, prelude::*};
 use serde::{Deserialize, Serialize};
 use sqlx::{
     prelude::FromRow,
-    query_as,
+    query, query_as,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     Error, SqlitePool,
 };
@@ -36,8 +36,12 @@ pub async fn establish_connection() -> SqlitePool {
         .expect("Unable to connect to SQLite database")
 }
 
-#[component]
-pub fn DbOpenWallet() -> Element {
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub fn db_open_wallet() {
     let nav = navigator();
 
     let mut status = use_signal(|| String::new());
@@ -95,5 +99,69 @@ pub fn DbOpenWallet() -> Element {
             }
         }
     });
-    rsx!(h1 { "{status.read()}" })
+}
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub fn db_add_wallet(name: String, password: String) {
+    let wallet_name = use_signal(|| name);
+    let wallet_password = use_signal(|| password);
+
+    let nav = navigator();
+
+    use_future(move || async move {
+        let name = wallet_name.read().clone();
+        let password = wallet_password.read().clone();
+
+        // try to create the requested one
+        match ChatWallet::create_wallet(
+            name.clone(),
+            password.clone(),
+            NETWORK,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        {
+            Ok(wallet) => {
+                match &*DB.read() {
+                    Some(db) => {
+                        // create base table if it does not exist
+                        query(
+                "CREATE TABLE IF NOT EXISTS user ( username TEXT NOT NULL, password TEXT NOT NULL )",
+            )
+            .execute(&*db)
+            .await
+            .expect("Cannot create DB");
+
+                        // store the login info in the database
+                        query("INSERT INTO user (username, password) VALUES (?1, ?2)")
+                            .bind(name)
+                            .bind(password)
+                            .execute(&*db)
+                            .await
+                            .expect("Error storing the login info in the database.");
+
+                        // use the new wallet instance as the app state wallet
+                        *WALLET.write() = Some(RwLock::new(wallet));
+
+                        info!("Wallet created successfully");
+                        nav.push(Route::Home {});
+                    }
+                    None => {
+                        info!("Db openning error");
+                    }
+                }
+            }
+
+            Err(e) => {
+                info!("Error creating wallet: {e}");
+            }
+        }
+    });
 }
