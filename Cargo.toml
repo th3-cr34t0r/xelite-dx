@@ -17,6 +17,8 @@ anyhow = "1.0.98"
 xelis_common = { git = "https://github.com/xelis-project/xelis-blockchain", branch = "dev", package = "xelis_common" }
 xelis_wallet = { git = "https://github.com/xelis-project/xelis-blockchain", branch = "dev", package = "xelis_wallet" }
 tokio = { version = "1.45.1", features = ["full"] }
+rustls = { version = "0.23.28", features = ["ring"] }
+futures = "0.3.31"
 
 [features]
 default = ["mobile"]
