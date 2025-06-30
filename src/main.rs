@@ -61,6 +61,11 @@ pub static DB: GlobalSignal<Option<SqlitePool>> = Signal::global(|| None);
 pub static WALLET: GlobalSignal<Option<RwLock<ChatWallet>>> = Signal::global(|| None);
 
 fn main() {
+    // call to fix crypto provider issue
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // The `launch` function is the main entry point for a dioxus app. It takes a component and renders it with the platform feature
     // you have enabled
     dioxus::launch(App);
