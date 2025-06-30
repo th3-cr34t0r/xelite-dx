@@ -1,18 +1,16 @@
-use anyhow::{anyhow, bail, Context, Error, Result};
-use log::{error, info, warn};
+use anyhow::{anyhow, bail, Context, Result};
+use dioxus::logger::tracing::info;
+use log::{error, warn};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, map::IntoValues};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 use xelis_common::{
     api::{wallet::TransactionEntry, DataElement, DataValue},
     config::{COIN_DECIMALS, XELIS_ASSET},
     crypto::{Address, Hash, Hashable},
     serializer::Serializer,
-    tokio::{spawn, time::sleep},
     transaction::{
         builder::{FeeBuilder, TransactionTypeBuilder, TransferBuilder},
         Transaction,
@@ -103,6 +101,7 @@ pub struct SummaryTransaction {
 pub struct ChatWallet {
     wallet: Arc<Wallet>,
     pub transactions: Vec<TransactionEntry>,
+    pub balance: String,
     pub topoheight: u64,
     pub is_online: bool,
     pub pending_transactions: Arc<RwLock<HashMap<Hash, (Transaction, TransactionBuilderState)>>>,
@@ -170,6 +169,7 @@ impl ChatWallet {
         Ok(ChatWallet {
             wallet: chat_wallet,
             transactions: Vec::new(),
+            balance: String::new(),
             topoheight: 0,
             is_online: false,
             pending_transactions: Arc::new(RwLock::new(HashMap::new())),
@@ -214,6 +214,7 @@ impl ChatWallet {
         Ok(ChatWallet {
             wallet: chat_wallet,
             transactions: Vec::new(),
+            balance: String::new(),
             topoheight: 0,
             is_online: false,
             pending_transactions: Arc::new(RwLock::new(HashMap::new())),
@@ -227,17 +228,19 @@ impl ChatWallet {
         if let Ok(event) = receiver.recv().await {
             match event {
                 Event::NewTransaction(transaction) => {
-                    // check if the new transaction is not stored
-                    if self
-                        .transactions
-                        .iter()
-                        .any(|tx| tx.hash != transaction.hash)
-                    {
-                        self.transactions.push(transaction);
-                    }
+                    info!("NewTransaction: {transaction:?}");
+
+                    self.transactions.push(transaction);
                 }
                 Event::NewTopoHeight { topoheight } => {
+                    info!("NewTopoHeight: {topoheight}");
                     self.topoheight = topoheight;
+                }
+                Event::BalanceChanged(new_balance) => {
+                    info!("BalanceChanged: {new_balance:?}");
+                    if new_balance.asset == XELIS_ASSET {
+                        self.balance = format_xelis(new_balance.balance);
+                    }
                 }
                 _ => {}
             }
@@ -348,11 +351,13 @@ impl ChatWallet {
     }
 
     /// Gets the Xelis balance
-    pub async fn get_balance(&self) -> Result<String> {
+    pub async fn get_balance(&mut self) -> Result<String> {
         let storage = self.wallet.get_storage().read().await;
         let balance = storage.get_plaintext_balance_for(&XELIS_ASSET).await?;
+        let formatted_balance = format_xelis(balance);
+        self.balance = formatted_balance.clone();
 
-        Ok(format_xelis(balance))
+        Ok(formatted_balance)
     }
 
     /// Format atomic units to human readable format
