@@ -1,5 +1,8 @@
 use crate::{
-    database::sql::DbUserLogin, views::DbContact, wallet::utils::NODE_ENDPOINT, Route, DB, WALLET,
+    database::sql::{db_store_message, DbUserLogin},
+    views::DbContact,
+    wallet::utils::NODE_ENDPOINT,
+    Route, DB, WALLET,
 };
 use dioxus::{logger::tracing::info, prelude::*};
 use futures::TryStreamExt;
@@ -61,7 +64,7 @@ pub fn Home() -> Element {
 
     let mut contacts_vec = use_signal(|| vec![DbContact::default()]);
     // read contacts from db
-    use_future(move || async move {
+    let mut db_contacts = use_resource(move || async move {
         if let Some(db) = &*DB.read() {
             // create base table if it does not exist
             query(
@@ -95,6 +98,7 @@ pub fn Home() -> Element {
 
     // pool for new app events
     use_future(move || async move {
+        let mut refresh_db = false;
         loop {
             if let Some(wallet) = &*WALLET.read() {
                 wallet.write().await.backgroud_daemon().await;
@@ -104,6 +108,18 @@ pub fn Home() -> Element {
 
                 // retrive the wallet balance
                 balance.set(wallet.read().await.balance.clone());
+
+                while let Some(tx) = wallet.write().await.rx_messages.pop() {
+                    // store the message
+                    db_store_message(tx).await;
+                    refresh_db = true;
+                }
+
+                // reload the db
+                if refresh_db {
+                    db_contacts.restart();
+                    refresh_db = false
+                }
             }
         }
     });

@@ -26,7 +26,7 @@ pub fn CreateNewWallet() -> Element {
         // if the name and password are not empty
         if !name.is_empty() && !password.is_empty() {
             // store the info as a wallet login
-            db_restore_wallet(name, password, None, None);
+            db_restore_wallet(name, password, None, None).await;
         }
     };
 
@@ -71,7 +71,7 @@ pub fn RestoreFromSeed() -> Element {
         // if the name and password are not empty
         if !name.is_empty() && !password.is_empty() {
             // store the info as a wallet login
-            db_restore_wallet(name, password, Some(wallet_seed), None);
+            db_restore_wallet(name, password, Some(wallet_seed), None).await;
         }
     };
 
@@ -122,7 +122,7 @@ pub fn RestoreFromPrivateKey() -> Element {
         // if the name and password are not empty
         if !name.is_empty() && !password.is_empty() {
             // store the info as a wallet login
-            db_restore_wallet(name, password, None, Some(wallet_private_key));
+            db_restore_wallet(name, password, None, Some(wallet_private_key)).await;
         }
     };
 

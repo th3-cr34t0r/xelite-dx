@@ -1,3 +1,4 @@
+use futures::TryStreamExt;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -12,6 +13,7 @@ use sqlx::{
 use tokio::sync::RwLock;
 
 use crate::{
+    views::{DbContact, DbMessage},
     wallet::utils::{ChatWallet, NETWORK},
     Route, DB, WALLET,
 };
@@ -41,64 +43,56 @@ pub async fn establish_connection() -> SqlitePool {
     clippy::await_holding_invalid_type,
     clippy::borrow_deref_ref
 )]
-pub fn db_open_wallet() {
+pub async fn db_open_wallet() {
     let nav = navigator();
 
-    let mut status = use_signal(|| String::new());
-    // lead the wallet login from db
-    use_future(move || async move {
-        // establish db connection
-        *DB.write() = Some(establish_connection().await);
+    // establish db connection
+    *DB.write() = Some(establish_connection().await);
 
-        match &*DB.read() {
-            Some(db) => {
-                // fetch user db entry
-                let db_user: Result<DbUserLogin, Error> =
-                    query_as("SELECT username, password FROM user")
-                        .fetch_one(&*db)
-                        .await;
+    match &*DB.read() {
+        Some(db) => {
+            // fetch user db entry
+            let db_user: Result<DbUserLogin, Error> =
+                query_as("SELECT username, password FROM user")
+                    .fetch_one(&*db)
+                    .await;
 
-                // in case there is a user in the db, open their wallet
-                match db_user {
-                    Ok(db_user) => {
-                        // try to open the stored wallet
-                        match ChatWallet::open_wallet(
-                            db_user.username,
-                            db_user.password,
-                            NETWORK,
-                            None,
-                            None,
-                        )
-                        .await
-                        {
-                            Ok(wallet) => {
-                                *WALLET.write() = Some(RwLock::new(wallet));
+            // in case there is a user in the db, open their wallet
+            match db_user {
+                Ok(db_user) => {
+                    // try to open the stored wallet
+                    match ChatWallet::open_wallet(
+                        db_user.username,
+                        db_user.password,
+                        NETWORK,
+                        None,
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(wallet) => {
+                            *WALLET.write() = Some(RwLock::new(wallet));
 
-                                info!("Wallet opened");
-                                status.set("Wallet Opened".to_string());
-                                nav.push(Route::Home {});
-                            }
-                            Err(_) => {
-                                info!("Wallet couldn't be opened");
-                                status.set("Wallet couldn't be opened".to_string());
-                                nav.push(Route::RestoreWalletOptions {});
-                            }
+                            info!("Wallet opened");
+                            nav.push(Route::Home {});
+                        }
+                        Err(_) => {
+                            info!("Wallet couldn't be opened");
+                            nav.push(Route::RestoreWalletOptions {});
                         }
                     }
-                    Err(e) => {
-                        info!("Wallet error: {e}");
-                        status.set(format!("Wallet error {}", e).to_string());
+                }
+                Err(e) => {
+                    info!("Wallet error: {e}");
 
-                        nav.push(Route::RestoreWalletOptions {});
-                    }
+                    nav.push(Route::RestoreWalletOptions {});
                 }
             }
-            None => {
-                status.set("DB NOT CREATED".to_string());
-                nav.push(Route::RestoreWalletOptions {});
-            }
         }
-    });
+        None => {
+            nav.push(Route::RestoreWalletOptions {});
+        }
+    }
 }
 
 #[allow(
@@ -106,71 +100,175 @@ pub fn db_open_wallet() {
     clippy::await_holding_invalid_type,
     clippy::borrow_deref_ref
 )]
-pub fn db_restore_wallet(
+pub async fn db_restore_wallet(
     name: String,
     password: String,
     seed: Option<String>,
     private_key: Option<String>,
 ) {
-    let wallet_name = use_signal(|| name);
-    let wallet_password = use_signal(|| password);
-    let wallet_seed = use_signal(|| seed);
-    let wallet_private_key = use_signal(|| private_key);
-
     let nav = navigator();
 
-    use_future(move || async move {
-        let name = wallet_name.read().clone();
-        let password = wallet_password.read().clone();
-        let seed = wallet_seed.read().clone();
-        let private_key = wallet_private_key.read().clone();
-
-        // try to create the requested one
-        match ChatWallet::create_wallet(
-            name.clone(),
-            password.clone(),
-            NETWORK,
-            seed,
-            private_key,
-            None,
-            None,
-        )
-        .await
-        {
-            Ok(wallet) => {
-                match &*DB.read() {
-                    Some(db) => {
-                        // create base table if it does not exist
-                        query(
+    // try to create the requested one
+    match ChatWallet::create_wallet(
+        name.clone(),
+        password.clone(),
+        NETWORK,
+        seed,
+        private_key,
+        None,
+        None,
+    )
+    .await
+    {
+        Ok(wallet) => {
+            match &*DB.read() {
+                Some(db) => {
+                    // create base table if it does not exist
+                    query(
                 "CREATE TABLE IF NOT EXISTS user ( username TEXT NOT NULL, password TEXT NOT NULL )",
             )
             .execute(&*db)
             .await
             .expect("Cannot create DB");
 
-                        // store the login info in the database
-                        query("INSERT INTO user (username, password) VALUES (?1, ?2)")
-                            .bind(name)
-                            .bind(password)
-                            .execute(&*db)
-                            .await
-                            .expect("Error storing the login info in the database.");
+                    // store the login info in the database
+                    query("INSERT INTO user (username, password) VALUES (?1, ?2)")
+                        .bind(name)
+                        .bind(password)
+                        .execute(&*db)
+                        .await
+                        .expect("Error storing the login info in the database.");
 
-                        // use the new wallet instance as the app state wallet
-                        *WALLET.write() = Some(RwLock::new(wallet));
+                    // use the new wallet instance as the app state wallet
+                    *WALLET.write() = Some(RwLock::new(wallet));
 
-                        info!("Wallet created/restored successfully");
-                        nav.push(Route::Home {});
-                    }
-                    None => {
-                        info!("DB openning error");
-                    }
+                    info!("Wallet created/restored successfully");
+                    nav.push(Route::Home {});
+                }
+                None => {
+                    info!("DB openning error");
                 }
             }
+        }
 
-            Err(e) => {
-                info!("Error creating/restoring wallet: {e}");
+        Err(e) => {
+            info!("Error creating/restoring wallet: {e}");
+        }
+    }
+}
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub async fn db_store_message(message: DbMessage) {
+    match &*DB.read() {
+        Some(db) => {
+            // create base table if it does not exist
+            query(
+                "CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )",
+            )
+            .execute(&*db)
+            .await
+            .expect("Cannot create contacts DB");
+
+            // get all the contacts
+            let all_contacts: Result<Vec<DbContact>, Error> = query_as("SELECT * FROM contacts")
+                .fetch(&*db)
+                .try_collect()
+                .await;
+
+            match all_contacts {
+                Ok(all_contacts_vec) => {
+                    let mut is_contained = false;
+
+                    // check if the address is already contained
+                    for contact in all_contacts_vec.iter() {
+                        if message.address == *contact.address {
+                            is_contained = true;
+                        }
+                    }
+
+                    if !is_contained {
+                        match query("INSERT INTO contacts (name, address) VALUES (?1, ?2)")
+                            .bind(message.address.clone().as_str())
+                            .bind(message.address.clone().as_str())
+                            .execute(&*db)
+                            .await
+                        {
+                            Ok(_) => {
+                                info!("Contact successfully added");
+                                db_store_msg(db, message).await;
+                            }
+                            Err(e) => {
+                                info!("Error adding contact to db: {e}");
+                                format!("Error adding contact to db: {}", e).to_string();
+                            }
+                        }
+                    } else {
+                        info!("Contact already exists, adding the message");
+                        db_store_msg(db, message).await;
+                    }
+                }
+                Err(e) => {
+                    info!("{e}");
+                }
             }
         }
-    });
+        None => {
+            info!("DB read error")
+        }
+    }
+}
+
+#[allow(clippy::await_holding_invalid_type, clippy::borrow_deref_ref)]
+async fn db_store_msg(db: &SqlitePool, message: DbMessage) {
+    // create Message table if it does not exist
+    query(
+        "CREATE TABLE IF NOT EXISTS
+             Message (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 direction TEXT NOT NULL,
+                 address TEXT NOT NULL,
+                 hash TEXT NOT NULL,
+                 timestamp INTEGER NOT NULL,
+                 topoheight INTEGER NOT NULL,
+                 asset TEXT NOT NULL,
+                 amount INTEGER NOT NULL,
+                 message TEXT
+             )",
+    )
+    .execute(&*db)
+    .await
+    .expect("Cannot create Messages DB");
+
+    // store Message query
+    match query(
+        "INSERT INTO
+             Message (
+                 direction,
+                 address,
+                 hash,
+                 timestamp,
+                 topoheight,
+                 asset,
+                 amount,
+                 message
+             ) VALUES ( ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 )",
+    )
+    .bind(message.direction)
+    .bind(message.address)
+    .bind(message.hash)
+    .bind(message.timestamp)
+    .bind(message.topoheight)
+    .bind(message.asset)
+    .bind(message.amount)
+    .bind(message.message.as_deref())
+    .execute(&*db)
+    .await
+    {
+        Ok(_) => info!("Message stored in db"),
+        Err(e) => info!("{e}"),
+    }
 }

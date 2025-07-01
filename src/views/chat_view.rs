@@ -1,10 +1,11 @@
 use crate::{
-    views::{DbAddress, DbMessage, DbRemoveContact, MessageDirection, RxMsg, TxSendMsg},
-    Route, DB,
+    database::sql::db_store_message, views::DbMessage, wallet::utils::Transfer, Route, DB, WALLET,
 };
 use chrono::Utc;
 use dioxus::{logger::tracing::info, prelude::*};
-use sqlx::query;
+use futures::TryStreamExt;
+use sqlx::{query, query_as, Error};
+use xelis_common::config::XELIS_ASSET;
 
 #[allow(
     clippy::redundant_closure,
@@ -19,98 +20,109 @@ pub fn ChatView(name: String, address: String) -> Element {
 
     let contact_name = use_signal(|| name);
     let contact_address = use_signal(|| address);
+    let mut topoheight = use_signal(|| u64::MIN);
 
-    let mut msgs_vec = use_signal(|| vec![DbMessage::default()]);
+    let mut messages_from_db = use_signal(|| vec![DbMessage::default()]);
 
     // load the messages from the database
-    let mut load_database = use_future(move || async move {
+    let mut message_db = use_future(move || async move {
         let address = contact_address.read().clone();
 
-        // let args = serde_wasm_bindgen::to_value(&DbAddress { address }).unwrap();
+        match &*DB.read() {
+            Some(db) => {
+                let db_messages: Result<Vec<DbMessage>, Error> = query_as(
+                 "SELECT direction, address, hash, timestamp, topoheight, asset, amount, message FROM Message WHERE address = ?",
+             )
+             .bind(address)
+             .fetch_all(&*db)
+             .await;
 
-        // let ret_msgs_vec = invoke("db_read_chat_messages", args.clone()).await;
+                match db_messages {
+                    Ok(db_messages) => {
+                        // empty the vec
+                        messages_from_db().clear();
 
-        // let db_msgs_vec: Result<Vec<DbMessage>, Error> =
-        //     serde_wasm_bindgen::from_value(ret_msgs_vec);
-
-        // if let Ok(db_msgs_vec) = db_msgs_vec {
-        //     // clear the vec before populating it again
-        //     msgs_vec.clear();
-        //     for message in db_msgs_vec.iter() {
-        //         // compare the timestamps and order them old -> new
-        //         // right now only display messages for the given address (contact)
-        //         msgs_vec.push(message.clone());
-        //     }
-        // }
-    });
-
-    let mut topoheight_event = use_signal(|| u64::MIN);
-    // pool for topoheight
-    use_future(move || async move {
-        // let mut listener = listen::<u64>("new_topoheight_event").await.unwrap();
-
-        // while let Some(event) = listener.next().await {
-        //     let Event {
-        //         event: _,
-        //         id: _,
-        //         payload,
-        //     } = event;
-        //     // store the new value
-        //     topoheight_event.set(payload);
-        // }
+                        //assign the new db value
+                        *messages_from_db.write() = db_messages;
+                    }
+                    Err(e) => {
+                        info!("{}", e);
+                    }
+                }
+            }
+            None => {
+                info!("Error reading DB");
+            }
+        }
     });
 
     // message signal
-    let mut msg_to_tx = use_signal(|| String::new());
+    let mut msg_to_send = use_signal(|| String::new());
     let mut submit_tx_message_info = use_signal(|| String::new());
 
     let subbmit_tx_message = move |_: FormEvent| async move {
         // only store input msg if it is not empty
-        if !(*msg_to_tx.read()).is_empty() {
+        if !(*msg_to_send.read()).is_empty() {
             // todo: prepare a tx and send it
             // todo: store the successfully sent tx localy in the database
 
-            //     let address = contact_address.read().clone();
-            //     let direction = MessageDirection::Outgoing;
-            //     let topoheight = topoheight_event() as i64;
-            //     let timestamp = timestamp;
-            //     let message = msg_to_tx.read().clone();
+            let mut message = DbMessage {
+                direction: "Outgoing".to_string(),
+                address: contact_address.read().clone(),
+                hash: Default::default(),
+                timestamp,
+                topoheight: topoheight() as i64,
+                asset: XELIS_ASSET.to_string(),
+                amount: Default::default(),
+                message: Some(msg_to_send.read().clone()),
+            };
 
-            //     // send the msg tx to the contact address
-            //     let tx_args = serde_wasm_bindgen::to_value(&TxSendMsg {
-            //         message: message.clone(),
-            //         address: address.clone(),
-            //     })
-            //     .unwrap();
+            match &*WALLET.read() {
+                Some(wallet_rw) => {
+                    let mut wallet = wallet_rw.write().await;
 
-            //     if let Some(tx_ret_val) = invoke("send_tx_msg", tx_args).await.as_string() {
-            //         if tx_ret_val == "Ok".to_string() {
-            //             // store message in db
-            //             let db_args = serde_wasm_bindgen::to_value(&DbMessage {
-            //                 address,
-            //                 direction,
-            //                 topoheight,
-            //                 timestamp,
-            //                 message,
-            //             })
-            //             .unwrap();
+                    // create the vector of transfers
+                    let transfers = vec![Transfer {
+                        float_amount: 0.0,
+                        str_address: contact_address.read().clone(),
+                        asset_hash: XELIS_ASSET.to_string(),
+                        extra_data: message.message.clone(),
+                    }];
 
-            //             if let Some(ret_val) = invoke("db_store_chat_messages", db_args.clone())
-            //                 .await
-            //                 .as_string()
-            //             {
-            //                 submit_tx_message_info.set(ret_val);
-            //             };
+                    let transaction_summary = wallet
+                        .create_transfers_transaction(transfers)
+                        .await
+                        .unwrap();
 
-            //             // read database
-            //             load_database.restart();
-            //         }
-            //         msg_to_tx.set("".to_string());
-            //     }
+                    match wallet
+                        .broadcast_transaction(transaction_summary.hash.clone())
+                        .await
+                    {
+                        Ok(_) => {
+                            info!("Message sent successfully");
+                            message.hash = transaction_summary.hash;
+                            // store it in db
+                            db_store_message(message).await;
+
+                            // reload database
+                            message_db.restart();
+
+                            // reset message field
+                            msg_to_send.set("".to_string());
+                        }
+                        Err(e) => {
+                            info!("{}", e)
+                        }
+                    }
+                }
+                None => {
+                    info!("Error reading wallet");
+                }
+            }
         }
     };
 
-    let mut rx_msg_info = use_signal(|| vec![RxMsg::default()]);
+    let mut rx_msg_info = use_signal(|| vec![DbMessage::default()]);
     use_future(move || async move {
         // poll the wallet for new inputs
 
@@ -137,7 +149,7 @@ pub fn ChatView(name: String, address: String) -> Element {
 
             match &*DB.read() {
                 Some(db) => {
-                    match query("DELETE FROM messages WHERE address = ?1")
+                    match query("DELETE FROM Message WHERE address = ?1")
                         .bind(address.clone())
                         .execute(&*db)
                         .await
@@ -173,18 +185,37 @@ pub fn ChatView(name: String, address: String) -> Element {
             }
         };
 
+    // pool for new app events
+    use_future(move || async move {
+        let mut refresh_db = false;
+        loop {
+            if let Some(wallet) = &*WALLET.read() {
+                wallet.write().await.backgroud_daemon().await;
+
+                // retrive the topoheight from the wallet
+                topoheight.set(wallet.read().await.topoheight);
+
+                while let Some(tx) = wallet.write().await.rx_messages.pop() {
+                    // store the message
+                    db_store_message(tx).await;
+                    refresh_db = true;
+                }
+
+                // reload the db
+                if refresh_db {
+                    message_db.restart();
+                    refresh_db = false
+                }
+            }
+        }
+    });
+
     rsx!(
         div { button { onclick: move |_| {nav.push(Route::Home {});}, "Back"}}
         div { a { "{contact_name()}" } }
         div { a { "{contact_address()}" } }
         div { a { "{remove_contact_info()}" } }
-        div { a { "Topoheight: {topoheight_event()}" } }
-
-        for msg in rx_msg_info().iter(){
-
-            div { a { "Received from: {msg.from_address:?}" } }
-            div { a { "Received message: {msg.transfer.message:?}" } }
-        }
+        div { a { "Topoheight: {topoheight()}" } }
 
         div {
               form {
@@ -194,18 +225,19 @@ pub fn ChatView(name: String, address: String) -> Element {
         }
         div {
             // display outgoing msgs
-            for msg in msgs_vec.iter() {
-                if MessageDirection::Err != msg.direction{
+            for msg in messages_from_db.cloned().iter() {
+                if msg.message.is_some() {
                     div {
-                         a { b { "{msg.direction:?}({msg.topoheight}): {msg.message}" } }
+                         a { b { "{msg.direction}({msg.topoheight}): {msg.message.as_ref().unwrap()}" } }
                     }
+
                 }
             }
             div { a {"{submit_tx_message_info.read()}"} }
 
             form {
                 onsubmit: subbmit_tx_message,
-                input { oninput: move |event| msg_to_tx.set(event.value()), value:"{msg_to_tx}",id:"message-input", placeholder:"Message...", autofocus: true }
+                input { oninput: move |event| msg_to_send.set(event.value()), value:"{msg_to_send}",id:"message-input", placeholder:"Message...", autofocus: true }
                 button { r#type:"submit", "Send"}
             }
         }

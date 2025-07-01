@@ -7,7 +7,10 @@ use std::{
     sync::{Arc, RwLock},
 };
 use xelis_common::{
-    api::{wallet::TransactionEntry, DataElement, DataValue},
+    api::{
+        wallet::{EntryType, TransactionEntry},
+        DataElement, DataValue,
+    },
     config::{COIN_DECIMALS, XELIS_ASSET},
     crypto::{Address, Hash, Hashable},
     serializer::Serializer,
@@ -26,6 +29,8 @@ use xelis_wallet::{
 };
 
 pub use xelis_common::network::Network;
+
+use crate::views::DbMessage;
 
 // pub const NODE_ENDPOINT: &str = "node.xelis.io"; //mainnet
 // pub static NETWORK: Network = Network::Mainnet; //mainnet
@@ -100,10 +105,11 @@ pub struct SummaryTransaction {
 
 pub struct ChatWallet {
     wallet: Arc<Wallet>,
-    pub transactions: Vec<TransactionEntry>,
+    pub rx_messages: Vec<DbMessage>,
     pub balance: String,
     pub topoheight: u64,
     pub is_online: bool,
+    // pub income_tx: Vec<IncomeTx>,
     pub pending_transactions: Arc<RwLock<HashMap<Hash, (Transaction, TransactionBuilderState)>>>,
 }
 
@@ -168,7 +174,7 @@ impl ChatWallet {
 
         Ok(ChatWallet {
             wallet: chat_wallet,
-            transactions: Vec::new(),
+            rx_messages: Vec::new(),
             balance: String::new(),
             topoheight: 0,
             is_online: false,
@@ -213,12 +219,45 @@ impl ChatWallet {
 
         Ok(ChatWallet {
             wallet: chat_wallet,
-            transactions: Vec::new(),
+            rx_messages: Vec::new(),
             balance: String::new(),
             topoheight: 0,
             is_online: false,
             pending_transactions: Arc::new(RwLock::new(HashMap::new())),
         })
+    }
+
+    async fn process_incoming_tx(&self, transaction: TransactionEntry) -> DbMessage {
+        let mut rx_message = DbMessage {
+            direction: "Incoming".to_string(),
+            address: Default::default(),
+            hash: transaction.hash.to_string(),
+            timestamp: transaction.timestamp as i64,
+            topoheight: transaction.topoheight as i64,
+            asset: Default::default(),
+            amount: Default::default(),
+            message: Default::default(),
+        };
+
+        let entry_data = transaction.entry;
+
+        if let EntryType::Incoming { from, transfers } = entry_data {
+            rx_message.address = from.as_string().unwrap();
+            let transfer = transfers[0].clone();
+
+            rx_message.asset = transfer.asset.to_string();
+            rx_message.amount = transfer.amount as i64;
+
+            rx_message.message = match transfer.extra_data {
+                Some(extra_data) => extra_data
+                    .data()
+                    .map(|extra_data| extra_data.clone().to_value().unwrap().to_string().unwrap()),
+                None => None,
+            };
+        }
+
+        info!("Transformed Transaction: {rx_message:#?}");
+        rx_message
     }
 
     pub async fn backgroud_daemon(&mut self) {
@@ -228,9 +267,18 @@ impl ChatWallet {
         if let Ok(event) = receiver.recv().await {
             match event {
                 Event::NewTransaction(transaction) => {
-                    info!("NewTransaction: {transaction:?}");
+                    info!("NewTransaction");
 
-                    self.transactions.push(transaction);
+                    let transaction = self.process_incoming_tx(transaction).await;
+
+                    // only store tranactions with messages
+                    if transaction.message.is_some() {
+                        self.rx_messages.push(transaction);
+                    } else {
+                        // only balance has changed
+                    }
+
+                    info!("WalletTransactions: {:#?}", self.rx_messages);
                 }
                 Event::NewTopoHeight { topoheight } => {
                     info!("NewTopoHeight: {topoheight}");

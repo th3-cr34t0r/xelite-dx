@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use sqlx::prelude::FromRow;
+use sqlx::{
+    prelude::{FromRow, Type},
+    Decode,
+};
 
 pub mod chat_view;
 pub mod home;
@@ -14,30 +17,14 @@ pub struct WalletCreateOpenArgs<'a> {
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, Eq, FromRow)]
 pub struct DbContact {
-    name: String,
-    address: String,
+    pub name: String,
+    pub address: String,
 }
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct DbRemoveContact {
     address: String,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub enum MessageDirection {
-    #[default]
-    Err,
-    Incoming,
-    Outgoing,
-}
-
-#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct DbMessage {
-    address: String,
-    direction: MessageDirection,
-    topoheight: i64,
-    timestamp: i64,
-    message: String,
-}
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct DbAddress {
     address: String,
@@ -66,18 +53,14 @@ pub struct AppEvents {
     transactions: Vec<TxData>,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone)]
-pub struct MsgTransfer {
-    asset: String,
-    amount: u64,
-    message: Option<String>,
-}
-
-#[derive(Default, Serialize, Deserialize, Debug, Clone)]
-pub struct RxMsg {
-    from_address: String,
-    hash: String,
-    timestamp: u64,
-    topoheight: u64,
-    transfer: MsgTransfer,
+#[derive(Default, Serialize, Deserialize, Debug, Clone, FromRow, Type)]
+pub struct DbMessage {
+    pub direction: String,
+    pub address: String,
+    pub hash: String,
+    pub timestamp: i64,
+    pub topoheight: i64,
+    pub asset: String,
+    pub amount: i64,
+    pub message: Option<String>,
 }
