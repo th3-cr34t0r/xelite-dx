@@ -106,23 +106,32 @@ pub fn db_open_wallet() {
     clippy::await_holding_invalid_type,
     clippy::borrow_deref_ref
 )]
-pub fn db_add_wallet(name: String, password: String) {
+pub fn db_restore_wallet(
+    name: String,
+    password: String,
+    seed: Option<String>,
+    private_key: Option<String>,
+) {
     let wallet_name = use_signal(|| name);
     let wallet_password = use_signal(|| password);
+    let wallet_seed = use_signal(|| seed);
+    let wallet_private_key = use_signal(|| private_key);
 
     let nav = navigator();
 
     use_future(move || async move {
         let name = wallet_name.read().clone();
         let password = wallet_password.read().clone();
+        let seed = wallet_seed.read().clone();
+        let private_key = wallet_private_key.read().clone();
 
         // try to create the requested one
         match ChatWallet::create_wallet(
             name.clone(),
             password.clone(),
             NETWORK,
-            None,
-            None,
+            seed,
+            private_key,
             None,
             None,
         )
@@ -150,17 +159,17 @@ pub fn db_add_wallet(name: String, password: String) {
                         // use the new wallet instance as the app state wallet
                         *WALLET.write() = Some(RwLock::new(wallet));
 
-                        info!("Wallet created successfully");
+                        info!("Wallet created/restored successfully");
                         nav.push(Route::Home {});
                     }
                     None => {
-                        info!("Db openning error");
+                        info!("DB openning error");
                     }
                 }
             }
 
             Err(e) => {
-                info!("Error creating wallet: {e}");
+                info!("Error creating/restoring wallet: {e}");
             }
         }
     });

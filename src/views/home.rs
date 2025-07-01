@@ -1,4 +1,6 @@
-use crate::{views::DbContact, wallet::utils::NODE_ENDPOINT, Route, DB, WALLET};
+use crate::{
+    database::sql::DbUserLogin, views::DbContact, wallet::utils::NODE_ENDPOINT, Route, DB, WALLET,
+};
 use dioxus::{logger::tracing::info, prelude::*};
 use futures::TryStreamExt;
 use sqlx::{query, query_as, Error};
@@ -261,16 +263,52 @@ pub fn ViewSeed() -> Element {
     let get_seed_phrase = move |_: FormEvent| async move {
         let entered_password = user_password.read().clone();
 
-        // let args = serde_wasm_bindgen::to_value(&DbPassword {
-        //     password: entered_password,
-        // })
-        // .unwrap();
+        match &*DB.read() {
+            Some(db) => {
+                let db_user: Result<DbUserLogin, Error> =
+                    query_as("SELECT username, password FROM user")
+                        .fetch_one(&*db)
+                        .await;
 
-        // if let Some(seed_phrase) = invoke("get_seed_phrase", args.clone()).await.as_string() {
-        //     seed_phrase_info.set(seed_phrase);
-        // } else {
-        //     seed_phrase_info.set("Error".to_string());
-        // }
+                match db_user {
+                    Ok(db_user) => {
+                        if entered_password == db_user.password {
+                            if let Some(wallet) = &*WALLET.read() {
+                                match wallet
+                                    .read()
+                                    .await
+                                    .get_mnemonic(crate::wallet::utils::MnemonicLanguage::English)
+                                    .await
+                                {
+                                    Ok(seed) => {
+                                        info!("SeedPhrase: {seed}");
+                                        seed_phrase_info.set(seed);
+                                    }
+                                    Err(e) => {
+                                        info!("SeedPhrase: {e}");
+                                        seed_phrase_info.set(e.to_string());
+                                    }
+                                }
+                            } else {
+                                info!("Wallet not initialized");
+                                seed_phrase_info.set("Wallet not initialized".to_string());
+                            }
+                        } else {
+                            info!("Incorrect password entered");
+                            seed_phrase_info.set("Incorrect password entered".to_string());
+                        }
+                    }
+                    Err(e) => {
+                        info!("{e}");
+                        seed_phrase_info.set(e.to_string());
+                    }
+                }
+            }
+            None => {
+                info!("DB not accessible");
+                seed_phrase_info.set("DB not accessible".to_string());
+            }
+        }
     };
 
     rsx!(

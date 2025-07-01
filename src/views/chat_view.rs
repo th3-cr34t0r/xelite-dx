@@ -1,9 +1,16 @@
 use crate::{
     views::{DbAddress, DbMessage, DbRemoveContact, MessageDirection, RxMsg, TxSendMsg},
-    Route,
+    Route, DB,
 };
 use chrono::Utc;
-use dioxus::prelude::*;
+use dioxus::{logger::tracing::info, prelude::*};
+use sqlx::query;
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
 #[component]
 pub fn ChatView(name: String, address: String) -> Element {
     let nav = navigator();
@@ -124,15 +131,47 @@ pub fn ChatView(name: String, address: String) -> Element {
     });
 
     let mut remove_contact_info = use_signal(|| String::new());
-    let remove_contact = move |_: FormEvent| async move {
-        // let address = contact_address.read().clone();
-        // let args = serde_wasm_bindgen::to_value(&DbRemoveContact { address }).unwrap();
+    let remove_contact =
+        move |_: FormEvent| async move {
+            let address = contact_address.read().clone();
 
-        // if let Some(ret_info) = invoke("db_remove_contact", args.clone()).await.as_string() {
-        //     remove_contact_info.set(ret_info);
-        //     nav.push(Route::Home {});
-        // }
-    };
+            match &*DB.read() {
+                Some(db) => {
+                    match query("DELETE FROM messages WHERE address = ?1")
+                        .bind(address.clone())
+                        .execute(&*db)
+                        .await
+                    {
+                        Ok(_) => {
+                            match query("DELETE FROM contacts WHERE address = ?1")
+                                .bind(address)
+                                .execute(&*db)
+                                .await
+                            {
+                                Ok(_) => remove_contact_info
+                                    .set("Contact removed successfully".to_string()),
+                                Err(e) => remove_contact_info.set(e.to_string()),
+                            }
+                        }
+                        Err(e) => {
+                            info!("{e}");
+                            match query("DELETE FROM contacts WHERE address = ?1")
+                                .bind(address)
+                                .execute(&*db)
+                                .await
+                            {
+                                Ok(_) => remove_contact_info
+                                    .set("Contact removed successfully".to_string()),
+                                Err(e) => remove_contact_info.set(e.to_string()),
+                            }
+                        }
+                    }
+                }
+                None => {
+                    remove_contact_info.set("Error reading DB".to_string());
+                }
+            }
+        };
 
     rsx!(
         div { button { onclick: move |_| {nav.push(Route::Home {});}, "Back"}}
