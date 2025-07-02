@@ -272,3 +272,179 @@ async fn db_store_msg(db: &SqlitePool, message: DbMessage) {
         Err(e) => info!("{e}"),
     }
 }
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub async fn db_add_contact(
+    db: &SqlitePool,
+    contact_ret_msg: &mut Signal<String>,
+    name: String,
+    address: String,
+) {
+    // create base table if it does not exist
+    query("CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )")
+        .execute(&*db)
+        .await
+        .expect("Cannot create contacts DB");
+
+    let all_contacts: Result<Vec<DbContact>, Error> = query_as("SELECT * FROM contacts")
+        .fetch(&*db)
+        .try_collect()
+        .await;
+
+    match all_contacts {
+        Ok(all_contacts_vec) => {
+            let ref_contact = DbContact {
+                name: name.clone(),
+                address: address.clone(),
+            };
+
+            let mut is_contained = false;
+
+            // check if the name and address is already contained
+            for contact in all_contacts_vec.iter() {
+                if ref_contact == *contact {
+                    is_contained = true;
+                }
+            }
+
+            if !is_contained {
+                match query("INSERT INTO contacts (name, address) VALUES (?1, ?2)")
+                    .bind(name.as_str())
+                    .bind(address.as_str())
+                    .execute(&*db)
+                    .await
+                {
+                    Ok(_) => {
+                        info!("Contact successfully added");
+                        contact_ret_msg.set("Contact successfully added".to_string());
+                    }
+                    Err(e) => {
+                        info!("Error adding contact to db: {e}");
+                        contact_ret_msg
+                            .set(format!("Error adding contact to db: {}", e).to_string());
+                    }
+                }
+            } else {
+                info!("Contact already exists");
+
+                contact_ret_msg.set("Contact already exists".to_string());
+            }
+        }
+        Err(e) => {
+            info!("{e}");
+            contact_ret_msg.set(e.to_string());
+        }
+    }
+}
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub async fn db_remove_contact(db: &SqlitePool, address: String) {
+    let nav = navigator();
+
+    match query("DELETE FROM Message WHERE address = ?1")
+        .bind(address.clone())
+        .execute(&*db)
+        .await
+    {
+        Ok(_) => {
+            match query("DELETE FROM contacts WHERE address = ?1")
+                .bind(address)
+                .execute(&*db)
+                .await
+            {
+                Ok(_) => {
+                    info!("Contact removed successfully");
+                    // route user to home
+                    nav.push(Route::Home {});
+                }
+                Err(e) => info!("{}", e),
+            }
+        }
+        Err(e) => {
+            info!("{}", e);
+            match query("DELETE FROM contacts WHERE address = ?1")
+                .bind(address)
+                .execute(&*db)
+                .await
+            {
+                Ok(_) => {
+                    info!("Contact removed successfully");
+                    // route user to home
+                    nav.push(Route::Home {});
+                }
+                Err(e) => info!("{}", e),
+            }
+        }
+    }
+}
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub async fn db_read_contacts(db: &SqlitePool, contacts_vec: &mut Signal<Vec<DbContact>>) {
+    // create base table if it does not exist
+    query("CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )")
+        .execute(&*db)
+        .await
+        .expect("Cannot create contacts DB");
+
+    let db_contacts: Result<Vec<DbContact>, Error> = query_as("SELECT name, address FROM contacts")
+        .fetch_all(&*db)
+        .await;
+
+    match db_contacts {
+        Ok(mut db_contacts) => {
+            while let Some(contact_from_db) = db_contacts.pop() {
+                info!("{contact_from_db:?}");
+                contacts_vec.write().push(DbContact {
+                    name: contact_from_db.name,
+                    address: contact_from_db.address,
+                });
+            }
+        }
+        Err(e) => {
+            info!("DbContacts retrived with error {e}");
+        }
+    }
+}
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub async fn db_read_messages(
+    db: &SqlitePool,
+    address: String,
+    messages_from_db: &mut Signal<Vec<DbMessage>>,
+) {
+    let db_messages: Result<Vec<DbMessage>, Error> = query_as(
+                 "SELECT direction, address, hash, timestamp, topoheight, asset, amount, message FROM Message WHERE address = ?",
+             )
+             .bind(address)
+             .fetch_all(&*db)
+             .await;
+
+    match db_messages {
+        Ok(db_messages) => {
+            // empty the vec
+            messages_from_db().clear();
+
+            //assign the new db value
+            *messages_from_db.write() = db_messages;
+        }
+        Err(e) => {
+            info!("{}", e);
+        }
+    }
+}

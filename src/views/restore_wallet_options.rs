@@ -1,4 +1,4 @@
-use crate::{database::sql::db_restore_wallet, Route};
+use crate::{database::db_fns::db_restore_wallet, Route};
 use dioxus::prelude::*;
 
 #[component]

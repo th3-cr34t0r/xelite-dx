@@ -1,11 +1,10 @@
 use crate::{
-    database::sql::{db_store_message, DbUserLogin},
+    database::db_fns::{db_add_contact, db_read_contacts, db_store_message},
     views::DbContact,
-    wallet::utils::NODE_ENDPOINT,
+    wallet::{utils::NODE_ENDPOINT, wallet_fns::wallet_get_seed},
     Route, DB, WALLET,
 };
 use dioxus::{logger::tracing::info, prelude::*};
-use futures::TryStreamExt;
 use sqlx::{query, query_as, Error};
 
 #[allow(
@@ -17,18 +16,27 @@ use sqlx::{query, query_as, Error};
 pub fn Home() -> Element {
     let nav = navigator();
 
-    // gets the wallet address
+    let mut contacts_vec = use_signal(|| vec![DbContact::default()]);
+
     let mut address = use_signal(|| String::new());
-    use_future(move || async move {
-        if let Some(wallet) = &*WALLET.read() {
-            *address.write() = wallet.read().await.get_address().await;
+    let mut online_status = use_signal(|| String::new());
+    let mut balance = use_signal(|| String::new());
+    let mut topoheight = use_signal(|| 0);
+
+    // read contacts from db
+    let mut db_contacts = use_resource(move || async move {
+        if let Some(db) = &*DB.read() {
+            db_read_contacts(db, &mut contacts_vec).await;
         }
     });
 
-    //set wallet online
-    let mut online_status = use_signal(|| String::new());
+    // get state info
     use_future(move || async move {
         if let Some(wallet) = &*WALLET.read() {
+            // get wallet address
+            *address.write() = wallet.read().await.get_address().await;
+
+            //set wallet online
             match wallet
                 .write()
                 .await
@@ -46,79 +54,38 @@ pub fn Home() -> Element {
                     }
                 }
             };
-        }
-    });
 
-    let mut balance = use_signal(|| String::new());
-    let mut topoheight = use_signal(|| u64::MIN);
-    // gets the wallet info
-    use_future(move || async move {
-        if let Some(wallet) = &*WALLET.read() {
+            // get balance
             if let Ok(ret_balance) = wallet.write().await.get_balance().await {
                 balance.set(ret_balance);
             };
 
+            // get topoheight
             topoheight.set(wallet.read().await.topoheight);
-        }
-    });
 
-    let mut contacts_vec = use_signal(|| vec![DbContact::default()]);
-    // read contacts from db
-    let mut db_contacts = use_resource(move || async move {
-        if let Some(db) = &*DB.read() {
-            // create base table if it does not exist
-            query(
-                "CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )",
-            )
-            .execute(&*db)
-            .await
-            .expect("Cannot create contacts DB");
+            // poll for new app events
+            let mut refresh_db = false;
+            loop {
+                if let Some(wallet) = &*WALLET.read() {
+                    wallet.write().await.backgroud_daemon().await;
 
-            let db_contacts: Result<Vec<DbContact>, Error> =
-                query_as("SELECT name, address FROM contacts")
-                    .fetch_all(&*db)
-                    .await;
+                    // retrive the topoheight from the wallet
+                    topoheight.set(wallet.read().await.topoheight);
 
-            match db_contacts {
-                Ok(mut db_contacts) => {
-                    while let Some(contact_from_db) = db_contacts.pop() {
-                        info!("{contact_from_db:?}");
-                        contacts_vec.write().push(DbContact {
-                            name: contact_from_db.name,
-                            address: contact_from_db.address,
-                        });
+                    // retrive the wallet balance
+                    balance.set(wallet.read().await.balance.clone());
+
+                    while let Some(tx) = wallet.write().await.rx_messages.pop() {
+                        // store the message
+                        db_store_message(tx).await;
+                        refresh_db = true;
                     }
-                }
-                Err(e) => {
-                    info!("DbContacts retrived with error {e}");
-                }
-            }
-        }
-    });
 
-    // pool for new app events
-    use_future(move || async move {
-        let mut refresh_db = false;
-        loop {
-            if let Some(wallet) = &*WALLET.read() {
-                wallet.write().await.backgroud_daemon().await;
-
-                // retrive the topoheight from the wallet
-                topoheight.set(wallet.read().await.topoheight);
-
-                // retrive the wallet balance
-                balance.set(wallet.read().await.balance.clone());
-
-                while let Some(tx) = wallet.write().await.rx_messages.pop() {
-                    // store the message
-                    db_store_message(tx).await;
-                    refresh_db = true;
-                }
-
-                // reload the db
-                if refresh_db {
-                    db_contacts.restart();
-                    refresh_db = false
+                    // reload the db
+                    if refresh_db {
+                        db_contacts.restart();
+                        refresh_db = false
+                    }
                 }
             }
         }
@@ -166,65 +133,7 @@ pub fn AddContact() -> Element {
 
         if !name.is_empty() && !address.is_empty() {
             if let Some(db) = &*DB.read() {
-                // create base table if it does not exist
-                query(
-                "CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )",
-            )
-            .execute(&*db)
-            .await
-            .expect("Cannot create contacts DB");
-
-                let all_contacts: Result<Vec<DbContact>, Error> =
-                    query_as("SELECT * FROM contacts")
-                        .fetch(&*db)
-                        .try_collect()
-                        .await;
-
-                match all_contacts {
-                    Ok(all_contacts_vec) => {
-                        let ref_contact = DbContact {
-                            name: name.clone(),
-                            address: address.clone(),
-                        };
-
-                        let mut is_contained = false;
-
-                        // check if the name and address is already contained
-                        for contact in all_contacts_vec.iter() {
-                            if ref_contact == *contact {
-                                is_contained = true;
-                            }
-                        }
-
-                        if !is_contained {
-                            match query("INSERT INTO contacts (name, address) VALUES (?1, ?2)")
-                                .bind(name.as_str())
-                                .bind(address.as_str())
-                                .execute(&*db)
-                                .await
-                            {
-                                Ok(_) => {
-                                    info!("Contact successfully added");
-                                    contact_ret_msg.set("Contact successfully added".to_string());
-                                }
-                                Err(e) => {
-                                    info!("Error adding contact to db: {e}");
-                                    contact_ret_msg.set(
-                                        format!("Error adding contact to db: {}", e).to_string(),
-                                    );
-                                }
-                            }
-                        } else {
-                            info!("Contact already exists");
-
-                            contact_ret_msg.set("Contact already exists".to_string());
-                        }
-                    }
-                    Err(e) => {
-                        info!("{e}");
-                        contact_ret_msg.set(e.to_string());
-                    }
-                }
+                db_add_contact(db, &mut contact_ret_msg, name, address).await;
             }
         } else {
             contact_ret_msg.set("Name and address cannot be empty".to_string());
@@ -280,46 +189,7 @@ pub fn ViewSeed() -> Element {
         let entered_password = user_password.read().clone();
 
         match &*DB.read() {
-            Some(db) => {
-                let db_user: Result<DbUserLogin, Error> =
-                    query_as("SELECT username, password FROM user")
-                        .fetch_one(&*db)
-                        .await;
-
-                match db_user {
-                    Ok(db_user) => {
-                        if entered_password == db_user.password {
-                            if let Some(wallet) = &*WALLET.read() {
-                                match wallet
-                                    .read()
-                                    .await
-                                    .get_mnemonic(crate::wallet::utils::MnemonicLanguage::English)
-                                    .await
-                                {
-                                    Ok(seed) => {
-                                        info!("SeedPhrase: {seed}");
-                                        seed_phrase_info.set(seed);
-                                    }
-                                    Err(e) => {
-                                        info!("SeedPhrase: {e}");
-                                        seed_phrase_info.set(e.to_string());
-                                    }
-                                }
-                            } else {
-                                info!("Wallet not initialized");
-                                seed_phrase_info.set("Wallet not initialized".to_string());
-                            }
-                        } else {
-                            info!("Incorrect password entered");
-                            seed_phrase_info.set("Incorrect password entered".to_string());
-                        }
-                    }
-                    Err(e) => {
-                        info!("{e}");
-                        seed_phrase_info.set(e.to_string());
-                    }
-                }
-            }
+            Some(db) => wallet_get_seed(db, entered_password, &mut seed_phrase_info).await,
             None => {
                 info!("DB not accessible");
                 seed_phrase_info.set("DB not accessible".to_string());

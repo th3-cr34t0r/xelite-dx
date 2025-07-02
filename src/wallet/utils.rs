@@ -107,22 +107,13 @@ pub struct ChatWallet {
     wallet: Arc<Wallet>,
     pub rx_messages: Vec<DbMessage>,
     pub balance: String,
-    pub topoheight: u64,
+    pub topoheight: i64,
     pub is_online: bool,
     // pub income_tx: Vec<IncomeTx>,
     pub pending_transactions: Arc<RwLock<HashMap<Hash, (Transaction, TransactionBuilderState)>>>,
 }
 
 // static CACHED_TABLES: Mutex<Option<precomputed_tables::PrecomputedTablesShared>> = Mutex::new(None);s
-
-// impl Clone for ChatWallet {
-//     fn clone(&self) -> Self {
-//         ChatWallet {
-//             wallet: Arc::clone(&self.wallet),
-//             pending_transactions: Arc::clone(&self.pending_transactions),
-//         }
-//     }
-// }
 
 impl ChatWallet {
     /// Create or restore wallet
@@ -282,7 +273,7 @@ impl ChatWallet {
                 }
                 Event::NewTopoHeight { topoheight } => {
                     info!("NewTopoHeight: {topoheight}");
-                    self.topoheight = topoheight;
+                    self.topoheight = topoheight as i64;
                 }
                 Event::BalanceChanged(new_balance) => {
                     info!("BalanceChanged: {new_balance:?}");

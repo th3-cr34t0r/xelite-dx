@@ -1,4 +1,4 @@
-use crate::database::sql::db_open_wallet;
+use crate::database::db_fns::db_open_wallet;
 use dioxus::prelude::*;
 
 #[component]
