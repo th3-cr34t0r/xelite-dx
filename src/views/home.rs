@@ -5,7 +5,6 @@ use crate::{
     Route, DB, WALLET,
 };
 use dioxus::{logger::tracing::info, prelude::*};
-use sqlx::{query, query_as, Error};
 
 #[allow(
     clippy::redundant_closure,
@@ -128,12 +127,14 @@ pub fn AddContact() -> Element {
 
     let add_contact = move |_: FormEvent| async move {
         // add the entry to the local database
-        let name = contact_name.read().clone();
-        let address = contact_address.read().clone();
+        let new_contact = DbContact {
+            name: contact_name.read().clone(),
+            address: contact_address.read().clone(),
+        };
 
-        if !name.is_empty() && !address.is_empty() {
+        if !new_contact.name.is_empty() && !new_contact.address.is_empty() {
             if let Some(db) = &*DB.read() {
-                db_add_contact(db, &mut contact_ret_msg, name, address).await;
+                db_add_contact(db, &mut contact_ret_msg, new_contact).await;
             }
         } else {
             contact_ret_msg.set("Name and address cannot be empty".to_string());

@@ -5,15 +5,15 @@ use crate::{
 };
 use dioxus::{
     hooks::UseFuture,
+    logger::tracing::info,
     signals::{Readable, Signal, Writable},
 };
-use log::info;
 use sqlx::{query_as, Error, SqlitePool};
 use xelis_common::config::XELIS_ASSET;
 
 use super::utils::Transfer;
 
-static DEV_FEE_ADDRESS: &str = "xet:gqef8a3qusf476lcqv0f4us947swgf38yrrs3x9npltjzh7mrcrqqgvgex3";
+static DEV_FEE_ADDRESS: &str = "xet:gqef8a3qusf476lcqv0f4us947swgf38yrrs3x9npltjzh7mrcrqqgvgex3"; // testnet
 static DEV_FEE_AMOUNT: f64 = 0.01;
 
 #[allow(
@@ -76,6 +76,7 @@ pub async fn wallet_send_message(
     topoheight: i64,
     msg_to_send: &mut Signal<String>,
     db_message_handle: &mut UseFuture,
+    info: &mut Signal<String>,
 ) {
     match &*WALLET.read() {
         Some(wallet_rw) => {
@@ -128,14 +129,17 @@ pub async fn wallet_send_message(
 
                             // reset message field
                             msg_to_send.set("".to_string());
+                            info.set("message sent".to_string());
                         }
                         Err(e) => {
-                            info!("{e}");
+                            info!("{}", e);
+                            info.set("error broadcasting tx".to_string());
                         }
                     }
                 }
                 Err(e) => {
-                    info!("{e}");
+                    info!("{}", e);
+                    info.set("error: is the address a Xelis address? Does the account have enough funds?".to_string());
                 }
             };
         }

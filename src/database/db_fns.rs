@@ -281,8 +281,7 @@ async fn db_store_msg(db: &SqlitePool, message: DbMessage) {
 pub async fn db_add_contact(
     db: &SqlitePool,
     contact_ret_msg: &mut Signal<String>,
-    name: String,
-    address: String,
+    new_contact: DbContact,
 ) {
     // create base table if it does not exist
     query("CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )")
@@ -297,41 +296,41 @@ pub async fn db_add_contact(
 
     match all_contacts {
         Ok(all_contacts_vec) => {
-            let ref_contact = DbContact {
-                name: name.clone(),
-                address: address.clone(),
-            };
-
-            let mut is_contained = false;
-
-            // check if the name and address is already contained
-            for contact in all_contacts_vec.iter() {
-                if ref_contact == *contact {
-                    is_contained = true;
-                }
-            }
-
-            if !is_contained {
-                match query("INSERT INTO contacts (name, address) VALUES (?1, ?2)")
-                    .bind(name.as_str())
-                    .bind(address.as_str())
-                    .execute(&*db)
-                    .await
+            // check if the name is contained
+            if !all_contacts_vec
+                .iter()
+                .any(|contact| contact.name == new_contact.name.clone())
+            {
+                // check if the address is contained
+                if !all_contacts_vec
+                    .iter()
+                    .any(|contact| contact.address == new_contact.address.clone())
                 {
-                    Ok(_) => {
-                        info!("Contact successfully added");
-                        contact_ret_msg.set("Contact successfully added".to_string());
+                    match query("INSERT INTO contacts (name, address) VALUES (?1, ?2)")
+                        .bind(new_contact.name.as_str())
+                        .bind(new_contact.address.as_str())
+                        .execute(&*db)
+                        .await
+                    {
+                        Ok(_) => {
+                            info!("Contact successfully added");
+                            contact_ret_msg.set("Contact successfully added".to_string());
+                        }
+                        Err(e) => {
+                            info!("Error adding contact to db: {e}");
+                            contact_ret_msg
+                                .set(format!("Error adding contact to db: {}", e).to_string());
+                        }
                     }
-                    Err(e) => {
-                        info!("Error adding contact to db: {e}");
-                        contact_ret_msg
-                            .set(format!("Error adding contact to db: {}", e).to_string());
-                    }
+                } else {
+                    info!("Contact address already exists");
+
+                    contact_ret_msg.set("Address already exists".to_string());
                 }
             } else {
-                info!("Contact already exists");
+                info!("Contact name already exists");
 
-                contact_ret_msg.set("Contact already exists".to_string());
+                contact_ret_msg.set("Name already exists".to_string());
             }
         }
         Err(e) => {

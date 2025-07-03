@@ -38,7 +38,7 @@ pub fn ChatView(name: String, address: String) -> Element {
 
     // message signal
     let mut msg_to_send = use_signal(|| String::new());
-
+    let mut info = use_signal(|| String::new());
     let subbmit_tx_message = move |_: FormEvent| async move {
         // only store input msg if it is not empty
         if !(*msg_to_send.read()).is_empty() {
@@ -48,6 +48,7 @@ pub fn ChatView(name: String, address: String) -> Element {
                 *topoheight.read(),
                 &mut msg_to_send,
                 &mut db_message_handle,
+                &mut info,
             )
             .await;
         }
@@ -118,5 +119,6 @@ pub fn ChatView(name: String, address: String) -> Element {
                 button { r#type:"submit", "Send"}
             }
         }
+        div { a { "{info()}" } }
     )
 }
