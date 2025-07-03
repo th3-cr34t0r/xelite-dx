@@ -38,8 +38,6 @@ pub fn ChatView(name: String, address: String) -> Element {
             }
         };
 
-        info!("messages_from_db: {:#?}", messages_from_db.read());
-
         // get the last message fee
         if let Some(message) = messages_from_db.read().last() {
             last_msg_fee.set(message.fee + DEV_FEE_AMOUNT);
@@ -129,7 +127,7 @@ pub fn ChatView(name: String, address: String) -> Element {
             for msg in messages_from_db.cloned().iter() {
                 if msg.message.is_some() {
                     div {
-                         a { b { "{msg.status} {msg.direction}({msg.topoheight}) | {msg.hash}: {msg.message.as_ref().unwrap()}" } }
+                         a { b {"{msg.direction} | "}, i { "{msg.status}({msg.topoheight}): " }, b { "{msg.message.as_ref().unwrap()}" } }
                     }
 
                 }
