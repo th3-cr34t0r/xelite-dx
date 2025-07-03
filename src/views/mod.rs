@@ -55,9 +55,11 @@ pub struct AppEvents {
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, FromRow, Type)]
 pub struct DbMessage {
+    pub status: String,
     pub direction: String,
     pub address: String,
     pub hash: String,
+    pub fee: f64,
     pub timestamp: i64,
     pub topoheight: i64,
     pub asset: String,

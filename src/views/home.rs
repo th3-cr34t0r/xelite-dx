@@ -1,5 +1,5 @@
 use crate::{
-    database::db_fns::{db_add_contact, db_read_contacts, db_store_message},
+    database::db_fns::{db_add_contact, db_read_contacts, db_store_init_message},
     views::DbContact,
     wallet::{utils::NODE_ENDPOINT, wallet_fns::wallet_get_seed},
     Route, DB, WALLET,
@@ -76,7 +76,7 @@ pub fn Home() -> Element {
 
                     while let Some(tx) = wallet.write().await.rx_messages.pop() {
                         // store the message
-                        db_store_message(tx).await;
+                        db_store_init_message(tx).await;
                         refresh_db = true;
                     }
 
@@ -132,12 +132,27 @@ pub fn AddContact() -> Element {
             address: contact_address.read().clone(),
         };
 
-        if !new_contact.name.is_empty() && !new_contact.address.is_empty() {
-            if let Some(db) = &*DB.read() {
-                db_add_contact(db, &mut contact_ret_msg, new_contact).await;
+        let wallet_address = match &*WALLET.read() {
+            Some(wallet) => Some(wallet.read().await.get_address().await),
+            None => {
+                info!("Error reading wallet");
+                None
+            }
+        };
+
+        if let Some(wallet_address) = wallet_address {
+            if !new_contact.name.is_empty()
+                && !new_contact.address.is_empty()
+                && new_contact.address != wallet_address
+            {
+                if let Some(db) = &*DB.read() {
+                    db_add_contact(db, &mut contact_ret_msg, new_contact).await;
+                }
+            } else {
+                contact_ret_msg.set("Name / address cannot be empty".to_string());
             }
         } else {
-            contact_ret_msg.set("Name and address cannot be empty".to_string());
+            contact_ret_msg.set("Error reading wallet address".to_string());
         }
     };
 

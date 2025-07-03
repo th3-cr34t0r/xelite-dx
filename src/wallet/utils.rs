@@ -30,7 +30,11 @@ use xelis_wallet::{
 
 pub use xelis_common::network::Network;
 
-use crate::views::DbMessage;
+use crate::{
+    database::db_fns::{db_update_status_fee, db_update_status_topoheight},
+    views::DbMessage,
+    IS_READY,
+};
 
 // pub const NODE_ENDPOINT: &str = "node.xelis.io"; //mainnet
 // pub static NETWORK: Network = Network::Mainnet; //mainnet
@@ -99,7 +103,7 @@ impl MnemonicLanguage {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SummaryTransaction {
     pub hash: String,
-    fee: u64,
+    pub fee: u64,
     transaction_type: TransactionTypeBuilder,
 }
 
@@ -109,7 +113,8 @@ pub struct ChatWallet {
     pub balance: String,
     pub topoheight: i64,
     pub is_online: bool,
-    // pub income_tx: Vec<IncomeTx>,
+    pub sent_tx_hashes: Vec<String>,
+    pub confirmed_messages: Vec<DbMessage>,
     pub pending_transactions: Arc<RwLock<HashMap<Hash, (Transaction, TransactionBuilderState)>>>,
 }
 
@@ -169,6 +174,8 @@ impl ChatWallet {
             balance: String::new(),
             topoheight: 0,
             is_online: false,
+            sent_tx_hashes: Vec::new(),
+            confirmed_messages: Vec::new(),
             pending_transactions: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -214,15 +221,19 @@ impl ChatWallet {
             balance: String::new(),
             topoheight: 0,
             is_online: false,
+            sent_tx_hashes: Vec::new(),
+            confirmed_messages: Vec::new(),
             pending_transactions: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
     async fn process_incoming_tx(&self, transaction: TransactionEntry) -> DbMessage {
         let mut rx_message = DbMessage {
+            status: "Received".to_string(),
             direction: "Incoming".to_string(),
             address: Default::default(),
             hash: transaction.hash.to_string(),
+            fee: Default::default(),
             timestamp: transaction.timestamp as i64,
             topoheight: transaction.topoheight as i64,
             asset: Default::default(),
@@ -234,23 +245,25 @@ impl ChatWallet {
 
         if let EntryType::Incoming { from, transfers } = entry_data {
             rx_message.address = from.as_string().unwrap();
-            let transfer = transfers[0].clone();
 
-            rx_message.asset = transfer.asset.to_string();
-            rx_message.amount = transfer.amount as i64;
+            for transfer_in in transfers.iter() {
+                rx_message.asset = transfer_in.asset.to_string();
+                rx_message.amount = transfer_in.amount as i64;
 
-            rx_message.message = match transfer.extra_data {
-                Some(extra_data) => extra_data
-                    .data()
-                    .map(|extra_data| extra_data.clone().to_value().unwrap().to_string().unwrap()),
-                None => None,
-            };
+                rx_message.message = match transfer_in.extra_data.clone() {
+                    Some(extra_data) => extra_data.data().map(|extra_data| {
+                        extra_data.clone().to_value().unwrap().to_string().unwrap()
+                    }),
+                    None => None,
+                };
+            }
         }
 
         info!("Transformed Transaction: {rx_message:#?}");
         rx_message
     }
 
+    #[allow(clippy::await_holding_invalid_type)]
     pub async fn backgroud_daemon(&mut self) {
         let wallet = self.get_wallet().await;
         let mut receiver = wallet.subscribe_events().await;
@@ -260,12 +273,36 @@ impl ChatWallet {
                 Event::NewTransaction(transaction) => {
                     info!("NewTransaction");
 
-                    let transaction = self.process_incoming_tx(transaction).await;
+                    let processed_tx = self.process_incoming_tx(transaction.clone()).await;
+                    info!("WALLET HASHES: {:#?}", self.sent_tx_hashes);
 
                     // only store tranactions with messages
-                    if transaction.message.is_some() {
-                        self.rx_messages.push(transaction);
+                    if processed_tx.message.is_some() {
+                        self.rx_messages.push(processed_tx);
+                    } else if let Some(index) = self
+                        .sent_tx_hashes
+                        .iter()
+                        .position(|hash| *hash == transaction.hash.to_hex())
+                    {
+                        info!("HASHES MATCH");
+                        let hash = self.sent_tx_hashes.remove(index);
+
+                        let message = DbMessage {
+                            status: "Received".to_string(),
+                            direction: Default::default(),
+                            address: Default::default(),
+                            hash,
+                            fee: Default::default(),
+                            timestamp: Default::default(),
+                            topoheight: transaction.topoheight as i64,
+                            asset: Default::default(),
+                            amount: Default::default(),
+                            message: None,
+                        };
+
+                        self.confirmed_messages.push(message);
                     } else {
+
                         // only balance has changed
                     }
 

@@ -59,6 +59,7 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 pub static DB: GlobalSignal<Option<SqlitePool>> = Signal::global(|| None);
 pub static WALLET: GlobalSignal<Option<RwLock<ChatWallet>>> = Signal::global(|| None);
+pub static IS_READY: GlobalSignal<RwLock<bool>> = Signal::global(|| RwLock::new(true));
 
 fn main() {
     // call to fix crypto provider issue

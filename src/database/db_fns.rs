@@ -162,7 +162,7 @@ pub async fn db_restore_wallet(
     clippy::await_holding_invalid_type,
     clippy::borrow_deref_ref
 )]
-pub async fn db_store_message(message: DbMessage) {
+pub async fn db_store_init_message(message: DbMessage) {
     match &*DB.read() {
         Some(db) => {
             // create base table if it does not exist
@@ -181,16 +181,11 @@ pub async fn db_store_message(message: DbMessage) {
 
             match all_contacts {
                 Ok(all_contacts_vec) => {
-                    let mut is_contained = false;
-
-                    // check if the address is already contained
-                    for contact in all_contacts_vec.iter() {
-                        if message.address == *contact.address {
-                            is_contained = true;
-                        }
-                    }
-
-                    if !is_contained {
+                    // check if the address is not contained
+                    if all_contacts_vec
+                        .iter()
+                        .any(|contact| message.address != contact.address)
+                    {
                         match query("INSERT INTO contacts (name, address) VALUES (?1, ?2)")
                             .bind(message.address.clone().as_str())
                             .bind(message.address.clone().as_str())
@@ -229,9 +224,11 @@ async fn db_store_msg(db: &SqlitePool, message: DbMessage) {
         "CREATE TABLE IF NOT EXISTS
              Message (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 status TEXT NOT NULL,
                  direction TEXT NOT NULL,
                  address TEXT NOT NULL,
-                 hash TEXT NOT NULL,
+                 hash TEXT,
+                 fee REAL,
                  timestamp INTEGER NOT NULL,
                  topoheight INTEGER NOT NULL,
                  asset TEXT NOT NULL,
@@ -247,19 +244,23 @@ async fn db_store_msg(db: &SqlitePool, message: DbMessage) {
     match query(
         "INSERT INTO
              Message (
+                 status,
                  direction,
                  address,
                  hash,
+                 fee,
                  timestamp,
                  topoheight,
                  asset,
                  amount,
                  message
-             ) VALUES ( ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 )",
+             ) VALUES ( ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 )",
     )
+    .bind(message.status)
     .bind(message.direction)
     .bind(message.address)
     .bind(message.hash)
+    .bind(message.fee)
     .bind(message.timestamp)
     .bind(message.topoheight)
     .bind(message.asset)
@@ -269,10 +270,112 @@ async fn db_store_msg(db: &SqlitePool, message: DbMessage) {
     .await
     {
         Ok(_) => info!("Message stored in db"),
-        Err(e) => info!("{e}"),
+        Err(e) => info!("{}", e),
     }
 }
 
+#[allow(clippy::await_holding_invalid_type, clippy::borrow_deref_ref)]
+pub async fn db_update_status_fee(message: DbMessage) {
+    match &*DB.read() {
+        Some(db) => {
+            // update Message query
+            match query("UPDATE Message SET status = ?1, fee = ?2 WHERE topoheight = ?3")
+                .bind(message.status)
+                .bind(message.fee)
+                .bind(message.topoheight)
+                .execute(&*db)
+                .await
+            {
+                Ok(_) => info!("Message updated successufully in db"),
+                Err(e) => info!("{e}"),
+            }
+        }
+
+        None => {
+            info!("DB read error")
+        }
+    }
+}
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub async fn db_update_status_topoheight(message: DbMessage) {
+    match &*DB.read() {
+        Some(db) => {
+            info!("{:#?}", message);
+            // update Message query
+            match query("UPDATE Message SET status = ?1, topoheight = ?2 WHERE hash = ?3")
+                .bind(message.status)
+                .bind(message.topoheight)
+                .bind(message.hash)
+                .execute(&*db)
+                .await
+            {
+                Ok(_) => info!("Message status and topoheight updated successufully in db"),
+                Err(e) => info!("{e}"),
+            }
+        }
+
+        None => {
+            info!("DB read error")
+        }
+    }
+}
+
+#[allow(
+    clippy::redundant_closure,
+    clippy::await_holding_invalid_type,
+    clippy::borrow_deref_ref
+)]
+pub async fn db_read_messages(
+    db: &SqlitePool,
+    address: String,
+    messages_from_db: &mut Signal<Vec<DbMessage>>,
+) {
+    let db_messages: Result<Vec<DbMessage>, Error> = query_as(
+                 "SELECT status, direction, address, hash, fee, timestamp, topoheight, asset, amount, message FROM Message WHERE address = ?",
+             )
+             .bind(address)
+             .fetch_all(&*db)
+             .await;
+
+    match db_messages {
+        Ok(db_messages) => {
+            // empty the vec
+            messages_from_db().clear();
+
+            //assign the new db value
+            *messages_from_db.write() = db_messages;
+        }
+        Err(e) => {
+            info!("{}", e);
+
+            // create Message table if it does not exist
+            query(
+                "CREATE TABLE IF NOT EXISTS
+             Message (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 status TEXT NOT NULL,
+                 direction TEXT NOT NULL,
+                 address TEXT NOT NULL,
+                 hash TEXT,
+                 fee REAL,
+                 timestamp INTEGER NOT NULL,
+                 topoheight INTEGER NOT NULL,
+                 asset TEXT NOT NULL,
+                 amount INTEGER NOT NULL,
+                 message TEXT
+             )",
+            )
+            .execute(&*db)
+            .await
+            .expect("Cannot create Messages DB");
+        }
+    }
+}
 #[allow(
     clippy::redundant_closure,
     clippy::await_holding_invalid_type,
@@ -413,37 +516,6 @@ pub async fn db_read_contacts(db: &SqlitePool, contacts_vec: &mut Signal<Vec<DbC
         }
         Err(e) => {
             info!("DbContacts retrived with error {e}");
-        }
-    }
-}
-
-#[allow(
-    clippy::redundant_closure,
-    clippy::await_holding_invalid_type,
-    clippy::borrow_deref_ref
-)]
-pub async fn db_read_messages(
-    db: &SqlitePool,
-    address: String,
-    messages_from_db: &mut Signal<Vec<DbMessage>>,
-) {
-    let db_messages: Result<Vec<DbMessage>, Error> = query_as(
-                 "SELECT direction, address, hash, timestamp, topoheight, asset, amount, message FROM Message WHERE address = ?",
-             )
-             .bind(address)
-             .fetch_all(&*db)
-             .await;
-
-    match db_messages {
-        Ok(db_messages) => {
-            // empty the vec
-            messages_from_db().clear();
-
-            //assign the new db value
-            *messages_from_db.write() = db_messages;
-        }
-        Err(e) => {
-            info!("{}", e);
         }
     }
 }
