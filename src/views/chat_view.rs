@@ -7,6 +7,7 @@ use crate::{
     Route, DB, IS_READY, WALLET,
 };
 use chrono::Utc;
+use chrono::{self, TimeZone};
 use dioxus::{logger::tracing::info, prelude::*};
 
 #[allow(
@@ -18,7 +19,7 @@ use dioxus::{logger::tracing::info, prelude::*};
 pub fn ChatView(name: String, address: String) -> Element {
     let nav = navigator();
 
-    let timestamp = Utc::now().timestamp();
+    let timestamp = Utc::now().format("%H:%M %d %m %Y").to_string();
 
     let contact_name = use_signal(|| name);
     let contact_address = use_signal(|| address);
@@ -60,7 +61,6 @@ pub fn ChatView(name: String, address: String) -> Element {
 
             wallet_send_message(
                 contact_address.read().clone(),
-                timestamp,
                 *topoheight.read(),
                 message,
                 &mut db_message_handle,

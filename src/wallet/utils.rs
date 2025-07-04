@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use chrono::{TimeZone, Utc};
 use dioxus::logger::tracing::info;
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
@@ -259,7 +260,6 @@ impl ChatWallet {
             }
         }
 
-        info!("Transformed Transaction: {rx_message:#?}");
         rx_message
     }
 
@@ -273,8 +273,7 @@ impl ChatWallet {
                 Event::NewTransaction(transaction) => {
                     info!("NewTransaction");
 
-                    let processed_tx = self.process_incoming_tx(transaction.clone()).await;
-                    info!("WALLET HASHES: {:#?}", self.sent_tx_hashes);
+                    let mut processed_tx = self.process_incoming_tx(transaction.clone()).await;
 
                     // only store tranactions with messages
                     if processed_tx.message.is_some() {
@@ -282,25 +281,13 @@ impl ChatWallet {
                     } else if let Some(index) = self
                         .sent_tx_hashes
                         .iter()
-                        .position(|hash| *hash == transaction.hash.to_hex())
+                        .position(|hash| *hash == processed_tx.hash)
                     {
-                        info!("HASHES MATCH");
-                        let hash = self.sent_tx_hashes.remove(index);
+                        let _ = self.sent_tx_hashes.remove(index);
 
-                        let message = DbMessage {
-                            status: "Received".to_string(),
-                            direction: Default::default(),
-                            address: Default::default(),
-                            hash,
-                            fee: Default::default(),
-                            timestamp: Default::default(),
-                            topoheight: transaction.topoheight as i64,
-                            asset: Default::default(),
-                            amount: Default::default(),
-                            message: None,
-                        };
+                        processed_tx.status = "Received".to_string();
 
-                        self.confirmed_messages.push(message);
+                        self.confirmed_messages.push(processed_tx);
                     } else {
 
                         // only balance has changed

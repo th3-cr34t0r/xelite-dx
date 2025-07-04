@@ -9,7 +9,7 @@ use dioxus::{
     signals::{Readable, Signal, Writable},
 };
 use sqlx::{query_as, Error, SqlitePool};
-use xelis_common::{config::XELIS_ASSET, serializer::Serializer, utils::format_xelis};
+use xelis_common::{config::XELIS_ASSET, utils::format_xelis};
 
 use super::utils::Transfer;
 
@@ -72,7 +72,6 @@ pub async fn wallet_get_seed(
 )]
 pub async fn wallet_send_message(
     contact_address: String,
-    timestamp: i64,
     topoheight: i64,
     message: String,
     db_message_handle: &mut UseFuture,
@@ -84,7 +83,7 @@ pub async fn wallet_send_message(
         address: contact_address.clone(),
         hash: Default::default(),
         fee: Default::default(),
-        timestamp,
+        timestamp: Default::default(),
         topoheight,
         asset: XELIS_ASSET.to_string(),
         amount: Default::default(),

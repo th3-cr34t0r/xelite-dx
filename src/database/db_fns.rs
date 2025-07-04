@@ -279,11 +279,12 @@ pub async fn db_update_status_fee(message: DbMessage) {
     match &*DB.read() {
         Some(db) => {
             // update Message query
-            match query("UPDATE Message SET status = ?1, hash = ?2, fee = ?3 WHERE topoheight = ?4")
+            match query("UPDATE Message SET status = ?1, hash = ?2, fee = ?3 WHERE topoheight = ?4 AND message = ?5")
                 .bind(message.status)
                 .bind(message.hash)
                 .bind(message.fee)
                 .bind(message.topoheight)
+                .bind(message.message)
                 .execute(&*db)
                 .await
             {
@@ -307,12 +308,15 @@ pub async fn db_update_status_topoheight(message: DbMessage) {
     match &*DB.read() {
         Some(db) => {
             // update Message query
-            match query("UPDATE Message SET status = ?1, topoheight = ?2 WHERE hash = ?3")
-                .bind(message.status)
-                .bind(message.topoheight)
-                .bind(message.hash)
-                .execute(&*db)
-                .await
+            match query(
+                "UPDATE Message SET status = ?1, topoheight = ?2, timestamp = ?3 WHERE hash = ?4",
+            )
+            .bind(message.status)
+            .bind(message.topoheight)
+            .bind(message.timestamp)
+            .bind(message.hash)
+            .execute(&*db)
+            .await
             {
                 Ok(_) => info!("Message status and topoheight updated successufully in db"),
                 Err(e) => info!("{e}"),
