@@ -79,5 +79,11 @@ fn main() {
 #[component]
 fn App() -> Element {
     // The `rsx!` macro lets us define HTML inside of rust. It expands to an Element with all of our HTML inside.
-    rsx!(Router::<Route> {})
+    rsx!(
+
+        document::Stylesheet{
+            href: asset!("/assets/tailwind.css")
+        }
+
+        Router::<Route> {})
 }

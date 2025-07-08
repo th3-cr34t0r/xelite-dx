@@ -33,7 +33,16 @@ pub fn Home() -> Element {
     use_future(move || async move {
         if let Some(wallet) = &*WALLET.read() {
             // get wallet address
-            *address.write() = wallet.read().await.get_address().await;
+            let local_address = wallet.read().await.get_address().await;
+            let address_len = local_address.len();
+
+            // shorten it
+            *address.write() = format!(
+                "{}...{}",
+                &local_address[..10],
+                &local_address[address_len - 10..]
+            )
+            .to_string();
 
             //set wallet online
             match wallet
@@ -42,14 +51,14 @@ pub fn Home() -> Element {
                 .set_online(NODE_ENDPOINT.to_string())
                 .await
             {
-                Ok(_) => online_status.set("online".to_string()),
+                Ok(_) => online_status.set("Online".to_string()),
                 Err(e) => {
                     if "Wallet is already in online mode" == e.to_string() {
                         info!("set_online error: {e}");
-                        online_status.set("online".to_string());
+                        online_status.set("Online".to_string());
                     } else {
                         info!("set_online error: {e}");
-                        online_status.set("offline".to_string());
+                        online_status.set("Offline".to_string());
                     }
                 }
             };
@@ -91,20 +100,35 @@ pub fn Home() -> Element {
     });
 
     rsx!(
-        div { "Home Screen" }
-        div { "Wallet Address: {address.read()}"}
-        div { "Balance: {balance.read()} XEL"}
-        div { "Status: {online_status.read()}"}
-        div { a { "Topoheight: {topoheight.read()}" } }
-        div {button {onclick: move |_| {nav.push(Route::AddContact {});},"Add Contact"}}
-        div {button {onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}}
+        div {class:"grid justify-center",
 
-        div {
-            for contact in contacts_vec.read().iter().cloned() {
-                // skip the default contact
-                if DbContact::default() != contact {
-                    div {
-                        button { onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}"}
+                div { class:"navbar bg-base-100 shadow-sm",
+                    div { class:"flex-none",
+                        button { class:"btn btn-square btn-ghost",
+                               svg { xmlns:"http://www.w3.org/2000/svg", fill:"none", "viewBox":"0 0 24 24", class:"inline-block h-5 w-5 stroke-current", path { "stroke-linecap":"round", "stroke-linejoin":"round", "stroke-width":"2", d:"M4 6h16M4 12h16M4 18h16"} }
+                        }
+                    }
+                    div { class:"flex-1",
+                        a {class:"text-xxl", "{address.read()}"}
+                    }
+                    div { if *online_status.read() == "Online" { a {class:"status status-success animate-ping"} } else { a { class:"status status-error animate-ping" },  " {online_status.read()}"} }
+                } // nav end
+
+            div { class:"grid place-items-center h-screen",
+
+                div { "Balance: {balance.read()} XEL"}
+                div { a { "Topoheight: {topoheight.read()}" } }
+                div {button {onclick: move |_| {nav.push(Route::AddContact {});},"Add Contact"}}
+                div {button {onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}}
+
+                div {
+                    for contact in contacts_vec.read().iter().cloned() {
+                        // skip the default contact
+                        if DbContact::default() != contact {
+                            div {
+                                button { onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}"}
+                            }
+                        }
                     }
                 }
             }

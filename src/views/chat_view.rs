@@ -8,6 +8,7 @@ use crate::{
 };
 use chrono::Utc;
 use chrono::{self, TimeZone};
+use daisy_rsx::{Button, ButtonSize, ButtonStyle, ButtonType};
 use dioxus::{logger::tracing::info, prelude::*};
 
 #[allow(
@@ -110,7 +111,7 @@ pub fn ChatView(name: String, address: String) -> Element {
     });
 
     rsx!(
-        div { button { onclick: move |_| {nav.push(Route::Home {});}, "Back"}}
+        div { button { onclick: move |_| {nav.push(Route::Home {});}, Button {class: "btn-neutral", popover_target: "set-name-drawer", button_style: ButtonStyle::Outline, "Back"} }}
         div { a { "{contact_name()}" } }
         div { a { "{contact_address()}" } }
         div { a { "Topoheight: {topoheight()}" } }
@@ -122,24 +123,41 @@ pub fn ChatView(name: String, address: String) -> Element {
                 button { r#type:"submit", "Delete Contact" }
               }
         }
-        div {
-            // display outgoing msgs
+
             for msg in messages_from_db.cloned().iter() {
                 if msg.message.is_some() {
-                    div {
-                         a { b {"{msg.direction} | "}, i { "{msg.status}({msg.topoheight}): " }, b { "{msg.message.as_ref().unwrap()}" } }
+                    if msg.direction == "Outgoing" {
+                        div { class:"chat chat-end",
+                            div { class:"chat-header", a { class:"text-xs opacity-50", "Topoheight: {msg.topoheight}" } }
+                            div { class:"chat-bubble",
+                                "{msg.message.as_ref().unwrap()}"
+                            }
+                            div { class:"chat-footer opacity-50", "{msg.status}" }
+                        }
+                    }
+                    else {
+                        div { class:"chat chat-start",
+                            div { class:"chat-header", a { class:"text-xs opacity-50", "Topoheight: {msg.topoheight}" } }
+                            div { class:"chat-bubble",
+                                "{msg.message.as_ref().unwrap()}"
+                            }
+                            div { class:"chat-footer opacity-50", "{msg.status}" }
+                        }
                     }
 
                 }
             }
 
+        div {
             form {
                 onsubmit: move |event| async move{
                     event.prevent_default();
                     subbmit_tx_message(event).await;
                 },
-                input { oninput: move |event| send_msg.set(event.value()), value:"{send_msg}",id:"message-input", placeholder:"Message...", autofocus: true }
-                button {disabled: !wallet_is_ready(), r#type:"submit", "Send"}
+            div { class:"flex flex-row gap-20",
+                  input { oninput: move |event| send_msg.set(event.value()), class:"input grow gap-4",value:"{send_msg}",id:"message-input", placeholder:"Message...", autofocus: true },
+                  button {class:"btn btn-primary w-14", disabled: !wallet_is_ready(), r#type:"submit", "Send"}
+                }
             }
         }
         div { a { "{info()}" } }
