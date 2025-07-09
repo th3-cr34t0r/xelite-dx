@@ -33,16 +33,17 @@ pub fn Home() -> Element {
     use_future(move || async move {
         if let Some(wallet) = &*WALLET.read() {
             // get wallet address
-            let local_address = wallet.read().await.get_address().await;
-            let address_len = local_address.len();
+            *address.write() = wallet.read().await.get_address().await;
+            // let local_address = wallet.read().await.get_address().await;
+            // let address_len = local_address.len();
 
             // shorten it
-            *address.write() = format!(
-                "{}...{}",
-                &local_address[..10],
-                &local_address[address_len - 10..]
-            )
-            .to_string();
+            // *address.write() = format!(
+            //     "{}...{}",
+            //     &local_address[..10],
+            //     &local_address[address_len - 10..]
+            // )
+            // .to_string();
 
             //set wallet online
             match wallet
@@ -100,39 +101,50 @@ pub fn Home() -> Element {
     });
 
     rsx!(
-        div {class:"grid justify-center",
 
-                div { class:"navbar bg-base-100 shadow-sm",
-                    div { class:"flex-none",
-                        button { class:"btn btn-square btn-ghost",
-                               svg { xmlns:"http://www.w3.org/2000/svg", fill:"none", "viewBox":"0 0 24 24", class:"inline-block h-5 w-5 stroke-current", path { "stroke-linecap":"round", "stroke-linejoin":"round", "stroke-width":"2", d:"M4 6h16M4 12h16M4 18h16"} }
-                        }
-                    }
-                    div { class:"flex-1",
-                        a {class:"text-xxl", "{address.read()}"}
-                    }
-                    div { if *online_status.read() == "Online" { a {class:"status status-success animate-ping"} } else { a { class:"status status-error animate-ping" },  " {online_status.read()}"} }
-                } // nav end
-
-            div { class:"grid place-items-center h-screen",
-
-                div { "Balance: {balance.read()} XEL"}
-                div { a { "Topoheight: {topoheight.read()}" } }
-                div {button {onclick: move |_| {nav.push(Route::AddContact {});},"Add Contact"}}
-                div {button {onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}}
-
-                div {
-                    for contact in contacts_vec.read().iter().cloned() {
-                        // skip the default contact
-                        if DbContact::default() != contact {
-                            div {
-                                button { onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}"}
+            div { class:"navbar bg-accent shadow-sm",
+                div { class:"navbar-start",
+                    div { class:"dropdown",
+                        div {"tabIndex":"0", role:"button", class:"btn btn-soft btn-accent btn-circle ",
+                            button { class:"btn btn-circle btn-ghost",
+                                   svg { xmlns:"http://www.w3.org/2000/svg", fill:"none", "viewBox":"0 0 24 24", class:"inline-block h-3 w-3 stroke-current", path { "stroke-linecap":"round", "stroke-linejoin":"round", "stroke-width":"2", d:"M4 6h16M4 12h16M4 18h7"} }
                             }
+                        }
+                        ul { "tabIndex":"0", class:"menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow",
+                            li {
+                                a {class:"text-xl", "{address.read()}"}
+                            }
+                            li {
+                                link {class:"",onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}
+                            }
+                            li { a { "Hompeage" } }
                         }
                     }
                 }
+                div { class:"navbar-center",
+                    div { class:"", if *online_status.read() == "Online" { a {class:"status status-success"} } else { a { class:"status status-error " } },  " {online_status.read()}" }
+                    div { class:"", a {class:"", "| {topoheight.read()}"} }
+                }
+                div { class:"navbar-end"}
+            } // nav end
+
+            main { class:"flex-grow p-4 h-screen overflow-auto",
+
+                // div { "Balance: {balance.read()} XEL"}
+                // div { a { "Topoheight: {topoheight.read()}" } }
+                div {class:"justify-items-center",
+                        for contact in contacts_vec.read().iter().cloned() {
+                            // skip the default contact
+                            if DbContact::default() != contact {
+                                div {class:"list bg-base-100 rounded-box shadow-md",
+                                    button { class:"list-row btn btn-base", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, div {class:"text-xs font-semibold ","{contact.name}"}}
+                                }
+                            }
+                        }
+
+                    div {class:"justify-items-end",button {class:"btn btn-circle btn-soft btn-accent", onclick: move |_| {nav.push(Route::AddContact {});}, "+" }}
+                }
             }
-        }
     )
 }
 
