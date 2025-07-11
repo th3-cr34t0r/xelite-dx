@@ -85,7 +85,7 @@ fn App() -> Element {
             href: asset!("/assets/tailwind.css")
         }
 
-        div { class:"app-container flex flex-col overflow-hidden",
+        div { class:"container-sm mx-auto overflow-hidden",
 
             Router::<Route> {}
         }

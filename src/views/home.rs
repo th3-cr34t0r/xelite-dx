@@ -123,25 +123,30 @@ pub fn Home() -> Element {
                 }
                 div { class:"navbar-center",
                     div { class:"", if *online_status.read() == "Online" { a {class:"status status-success"} } else { a { class:"status status-error " } },  " {online_status.read()}" }
-                    div { class:"", a {class:"", "| {topoheight.read()}"} }
+                    div { class:"", a {class:"", " | {topoheight.read()}"} }
                 }
                 div { class:"navbar-end"}
             } // nav end
 
             main { class:"flex-grow p-4 h-screen overflow-auto",
 
-                // div { "Balance: {balance.read()} XEL"}
-                // div { a { "Topoheight: {topoheight.read()}" } }
-                div {class:"justify-items-center",
+                div {class:"justify-start",
                         for contact in contacts_vec.read().iter().cloned() {
                             // skip the default contact
                             if DbContact::default() != contact {
-                                div {class:"list bg-base-100 rounded-box shadow-md",
-                                    button { class:"list-row btn btn-base", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, div {class:"text-xs font-semibold ","{contact.name}"}}
+                    div {class:"card bg-primary rounded-box shadow-md",
+                                link { class:"card-body m-4", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});},
+                                    div {class:"flex",
+                                        div { class:"h-16 grow avatar avatar-placeholder",
+                                            div { class:"bg-neutral text-neutral-content size-24 rounded-full", span { class:"text-3xl", "{&contact.name[..1]}" } }
+                                        }
+                                        div { class:"flex-1 card-title", "{contact.name}"}
+                                    }
                                 }
+
                             }
                         }
-
+                    }
                     div {class:"justify-items-end",button {class:"btn btn-circle btn-soft btn-accent", onclick: move |_| {nav.push(Route::AddContact {});}, "+" }}
                 }
             }
