@@ -9,7 +9,7 @@ use std::{
 };
 use xelis_common::{
     api::{
-        wallet::{EntryType, TransactionEntry},
+        wallet::{BaseFeeMode, EntryType, TransactionEntry},
         DataElement, DataValue,
     },
     config::{COIN_DECIMALS, XELIS_ASSET},
@@ -456,7 +456,11 @@ impl ChatWallet {
 
         let estimated_fees = self
             .wallet
-            .estimate_fees(transaction_builder, FeeBuilder::default())
+            .estimate_fees(
+                transaction_builder,
+                FeeBuilder::default(),
+                BaseFeeMode::None,
+            )
             .await
             .context("Error while estimating fees")?;
 
@@ -485,6 +489,8 @@ impl ChatWallet {
                     &storage,
                     transaction_type_builder.clone(),
                     FeeBuilder::default(),
+                    BaseFeeMode::None,
+                    None,
                 )
                 .await?
         };

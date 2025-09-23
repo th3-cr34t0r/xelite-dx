@@ -111,7 +111,7 @@ pub fn ChatView(name: String, address: String) -> Element {
     });
 
     rsx!(
-        div { button { onclick: move |_| {nav.push(Route::Home {});}, Button {class: "btn-neutral", popover_target: "set-name-drawer", button_style: ButtonStyle::Outline, "Back"} }}
+        div { button { onclick: move |_| {nav.push(Route::Home {});}, Button {class: "", popover_target: "set-name-drawer", "Back"} }}
         div { a { "{contact_name()}" } }
         div { a { "{contact_address()}" } }
         div { a { "Topoheight: {topoheight()}" } }
@@ -127,21 +127,21 @@ pub fn ChatView(name: String, address: String) -> Element {
             for msg in messages_from_db.cloned().iter() {
                 if msg.message.is_some() {
                     if msg.direction == "Outgoing" {
-                        div { class:"chat chat-end",
-                            div { class:"chat-header", a { class:"text-xs opacity-50", "Topoheight: {msg.topoheight}" } }
-                            div { class:"chat-bubble",
+                        div { class:"",
+                            div { class:"", a { class:"", "Topoheight: {msg.topoheight}" } }
+                            div { class:"",
                                 "{msg.message.as_ref().unwrap()}"
                             }
-                            div { class:"chat-footer opacity-50", "{msg.status}" }
+                            div { class:"", "{msg.status}" }
                         }
                     }
                     else {
-                        div { class:"chat chat-start",
-                            div { class:"chat-header", a { class:"text-xs opacity-50", "Topoheight: {msg.topoheight}" } }
-                            div { class:"chat-bubble",
+                        div { class:"",
+                            div { class:"", a { class:"", "Topoheight: {msg.topoheight}" } }
+                            div { class:"",
                                 "{msg.message.as_ref().unwrap()}"
                             }
-                            div { class:"chat-footer opacity-50", "{msg.status}" }
+                            div { class:"", "{msg.status}" }
                         }
                     }
 
@@ -155,8 +155,8 @@ pub fn ChatView(name: String, address: String) -> Element {
                     subbmit_tx_message(event).await;
                 },
             div { class:"flex flex-row gap-20",
-                  input { oninput: move |event| send_msg.set(event.value()), class:"input grow gap-4",value:"{send_msg}",id:"message-input", placeholder:"Message...", autofocus: true },
-                  button {class:"btn btn-primary w-14", disabled: !wallet_is_ready(), r#type:"submit", "Send"}
+                  input { oninput: move |event| send_msg.set(event.value()), class:"",value:"{send_msg}",id:"message-input", placeholder:"type a message...", autofocus: true },
+                  button {class:"", disabled: !wallet_is_ready(), r#type:"submit", "Send"}
                 }
             }
         }
