@@ -21,6 +21,7 @@ pub fn Home() -> Element {
     let mut online_status = use_signal(|| String::new());
     let mut balance = use_signal(|| String::new());
     let mut topoheight = use_signal(|| 0);
+    let mut sidebar = use_signal(|| String::from("invisible"));
 
     // read contacts from db
     let mut db_contacts = use_resource(move || async move {
@@ -125,47 +126,51 @@ pub fn Home() -> Element {
                 //     }
                 //     div { class:"navbar-end"}
                 // } // nav end
-div { class:"h-screen w-full flex flex-col",
-                div { class:"invisible absolute bg-gray-800 text-white w-56 min-h-screen overflow-y-auto transition-transform transform ease-in-out duration-300",
+                div { class:"{sidebar} absolute bg-black text-green-600 outline-2 outline-green-700 w-80 min-h-screen overflow-y-auto transition-transform transform ease-in-out duration-300",
                       id:"sidebar",
                         div { class:"p-4",
-                            h1 { class:"text-2xl font-semibold", "XELITE"}
+                            div {  class:"flex justify-between",
+                            h1 { class:"text-2xl font-semibold p-4", "XELITE",
+                        }
+
+                            button { class:"p-4 text-xl text-green-600 hover:text-green-500", id: "open-sidebar", onclick: move |_| sidebar.set("hidden".to_string()), "<"}
+                    }
                             ul { class:"mt-4",
-                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "1" } }
-                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "2" } }
-                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "3" } }
-                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "4" } }
+                                li { class:"mb-2", a { class:"block hover:text-green-500", "Profile" } }
+                                li { class:"mb-2", a { class:"block hover:text-green-500", "Settings" } }
+                                li { class:"mb-2", a { class:"block hover:text-green-500", "Info" } }
                             }
+                            div { class:"absolute bottom-0 left-0 m-2 text-s text-green-900", "Xelite v0.0.1"}
                         }
                 }
 
-                div { class:"overflow-hidden",
-                    div { class:"bg-black",
+                    div { class:"outline-2 outline-green-700 rounded-xl m-4",
                             div { class:"container mx-auto",
-                                div { class:"flex justify-between items-center py-4 px-2",
-                                    button { class:"text-green-600 hover:text-green-500", id: "open-sidebar", "button"}
-                                    h1 { class:"text-xl font-semibold text-green-600", "HERE" }
+                                div { class:"flex justify-between items-center ",
+                                button { class:"text-xl font-semibold text-green-600 hover:text-green-500 p-4", id: "open-sidebar", onclick: move |_| sidebar.set("".to_string()), ">"}
+                        h1 { class:"text-xl font-semibold text-green-600", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
 
-                        div { class:"text-green-600", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
-                        div { class:"text-green-600", "|"}
-                        div { class:"text-green-600", a {class:"", "{topoheight.read()}"} }
+                        h1 { class:"text-xl font-semibold text-green-600", "|" }
+
+                        h1 { class:"text-xl font-semibold text-green-600", "{topoheight.read()}"}
+                        h1 { class:"", "" }
                                     }
-                                }
                         }
                 }
 
     // main
-                div { class:"flex-1 overflow-auto p-4 bg-black",
+                div { class:"flex flex-col p-4",
                             for contact in contacts_vec.read().iter().cloned() {
                                 // skip the default contact
                                 if DbContact::default() != contact {
-                                       div { class:"col-span-3 justify-center", button { class:"text-green-600 hover:text-green-500", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}" }}
+                                       button { class:"outline-2 outline-green-700 rounded-xl m-2 text-green-600 hover:outline-green-500 hover:text-green-500", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}" }
                                 }
                             }
 
-                        div { class:"col-start-3 justify-center", button { class:"text-green-600 hover:text-green-500", onclick: move |_| {nav.push(Route::AddContact {});}, "+" }}
                     }
-     }   )
+                        div { class:"absolute right-0 bottom-0 m-8", button { class:"outline-2 outline-green-500 rounded-xl size-16 hover:bg-green-600 text-green-600 hover:text-black", onclick: move |_| {nav.push(Route::AddContact {});}, "+" }}
+
+      )
 }
 
 #[allow(
