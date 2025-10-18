@@ -433,12 +433,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "askama_escape"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "619743e34b5ba4e9703bba34deac3427c72507c7159f5fd030aea8cac0cfe341"
-
-[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1606,16 +1600,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "daisy_rsx"
-version = "0.1.42"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8a1573e666433717f3e7e4e6be420a89bb584b1b233fbc431e2ae0b43fdd9d4"
-dependencies = [
- "dioxus",
- "dioxus-ssr",
-]
-
-[[package]]
 name = "darling"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2139,18 +2123,6 @@ dependencies = [
  "rustc-hash 1.1.0",
  "tracing",
  "warnings",
-]
-
-[[package]]
-name = "dioxus-ssr"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38e1fac097e71ccec4e9e15d44b68393be2981276e42170703180bceb0b6f122"
-dependencies = [
- "askama_escape",
- "dioxus-core",
- "dioxus-core-types",
- "rustc-hash 1.1.0",
 ]
 
 [[package]]
@@ -8136,7 +8108,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "daisy_rsx",
  "dioxus",
  "futures",
  "log",

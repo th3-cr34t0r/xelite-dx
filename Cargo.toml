@@ -19,7 +19,6 @@ xelis_wallet = { git = "https://github.com/xelis-project/xelis-blockchain", bran
 tokio = { version = "1.45.1", features = ["full"] }
 rustls = { version = "0.23.28", features = ["ring"] }
 futures = "0.3.31"
-daisy_rsx = "0.1.42"
 
 [features]
 default = ["mobile"]

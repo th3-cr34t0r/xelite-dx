@@ -34,16 +34,16 @@ pub fn Home() -> Element {
         if let Some(wallet) = &*WALLET.read() {
             // get wallet address
             *address.write() = wallet.read().await.get_address().await;
-            // let local_address = wallet.read().await.get_address().await;
-            // let address_len = local_address.len();
+            let local_address = wallet.read().await.get_address().await;
+            let address_len = local_address.len();
 
             // shorten it
-            // *address.write() = format!(
-            //     "{}...{}",
-            //     &local_address[..10],
-            //     &local_address[address_len - 10..]
-            // )
-            // .to_string();
+            *address.write() = format!(
+                "{}...{}",
+                &local_address[..10],
+                &local_address[address_len - 10..]
+            )
+            .to_string();
 
             //set wallet online
             match wallet
@@ -102,79 +102,70 @@ pub fn Home() -> Element {
 
     rsx!(
 
-            // div { class:"navbar",
-            //     div { class:"navbar-start",
-            //         div { class:"dropdown",
-            //             div {"tabIndex":"0", role:"button", class:"btn",
-            //                 button { class:"btn color-black"}
-            //             }
-            //             ul { "tabIndex":"0", class:"",
-            //                 li {
-            //                     a {class:"text-xl", "{address.read()}"}
-            //                 }
-            //                 li {
-            //                     link {class:"",onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}
-            //                 }
-            //                 li { a { "Hompeage" } }
-            //             }
-            //         }
-            //     }
-            //     div { class:"navbar-center",
-            //         div { class:"", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
-            //         div { class:"", a {class:"", " | {topoheight.read()}"} }
-            //     }
-            //     div { class:"navbar-end"}
-            // } // nav end
-
-            div { class:" absolute bg-gray-800 text-white w-56 min-h-screen overflow-y-auto transition-transform transform ease-in-out duration-300",
-                  id:"sidebar",
-                    div { class:"p-4",
-                        h1 { class:"text-2xl font-semibold", "XELITE"}
-                        ul { class:"mt-4",
-                            li { class:"mb-2", a { class:"block hover:text-indigo-400", "1" } }
-                            li { class:"mb-2", a { class:"block hover:text-indigo-400", "2" } }
-                            li { class:"mb-2", a { class:"block hover:text-indigo-400", "3" } }
-                            li { class:"mb-2", a { class:"block hover:text-indigo-400", "4" } }
-                        }
-                    }
-            }
-
-            div { class:"flex-1 flex flex-col overflow-hidden",
-                div { class:"bg-white shadow",
-                        div { class:"container mx-auto",
-                            div { class:"flex justify-between items-center py-4 px-2",
-                                h1 { class:"text-xl font-semibold", "HERE" }
-                                button { class:"text-gray-500 hover:text-gray-600", id: "open-sidebar", "button"}
-                                }
+                // div { class:"navbar",
+                //     div { class:"navbar-start",
+                //         div { class:"dropdown",
+                //             div {"tabIndex":"0", role:"button", class:"btn",
+                //                 button { class:"btn color-black"}
+                //             }
+                //             ul { "tabIndex":"0", class:"",
+                //                 li {
+                //                     a {class:"text-xl", "{address.read()}"}
+                //                 }
+                //                 li {
+                //                     link {class:"",onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}
+                //                 }
+                //                 li { a { "Hompeage" } }
+                //             }
+                //         }
+                //     }
+                //     div { class:"navbar-center",
+                //         div { class:"", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
+                //         div { class:"", a {class:"", " | {topoheight.read()}"} }
+                //     }
+                //     div { class:"navbar-end"}
+                // } // nav end
+div { class:"h-screen w-full flex flex-col",
+                div { class:"invisible absolute bg-gray-800 text-white w-56 min-h-screen overflow-y-auto transition-transform transform ease-in-out duration-300",
+                      id:"sidebar",
+                        div { class:"p-4",
+                            h1 { class:"text-2xl font-semibold", "XELITE"}
+                            ul { class:"mt-4",
+                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "1" } }
+                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "2" } }
+                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "3" } }
+                                li { class:"mb-2", a { class:"block hover:text-indigo-400", "4" } }
                             }
-                    }
-            }
-
-            div { class:"flex-1 overflow-auto p-4",
-                div { class:"justify-start",
-                        for contact in contacts_vec.read().iter().cloned() {
-                            // skip the default contact
-                            if DbContact::default() != contact {
-                                div {class:"text",
-                                    link { class:"", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});},
-                                        div {class:"flex",
-                                            div { class:"", span { class:"text", "{&contact.name[..1]}" } }
-                                            div { class:"", "{contact.name}"}
-                                        }
-                                    }
-                                }
-                            }
-                    }
-
-                    }
-                    div { class:"", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
-                    div { class:"", a {class:"", " | {topoheight.read()}"} }
-
-                    div { class:"justify-items-end",
-                            button { class:"", onclick: move |_| {nav.push(Route::AddContact {});}, "+" }
                         }
                 }
-    )
+
+                div { class:"overflow-hidden",
+                    div { class:"bg-black",
+                            div { class:"container mx-auto",
+                                div { class:"flex justify-between items-center py-4 px-2",
+                                    button { class:"text-green-600 hover:text-green-500", id: "open-sidebar", "button"}
+                                    h1 { class:"text-xl font-semibold text-green-600", "HERE" }
+
+                        div { class:"text-green-600", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
+                        div { class:"text-green-600", "|"}
+                        div { class:"text-green-600", a {class:"", "{topoheight.read()}"} }
+                                    }
+                                }
+                        }
+                }
+
+    // main
+                div { class:"flex-1 overflow-auto p-4 bg-black",
+                            for contact in contacts_vec.read().iter().cloned() {
+                                // skip the default contact
+                                if DbContact::default() != contact {
+                                       div { class:"col-span-3 justify-center", button { class:"text-green-600 hover:text-green-500", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}" }}
+                                }
+                            }
+
+                        div { class:"col-start-3 justify-center", button { class:"text-green-600 hover:text-green-500", onclick: move |_| {nav.push(Route::AddContact {});}, "+" }}
+                    }
+     }   )
 }
 
 #[allow(

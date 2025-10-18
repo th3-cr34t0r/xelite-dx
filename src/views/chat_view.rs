@@ -1,14 +1,13 @@
 use crate::{
+    DB, IS_READY, Route, WALLET,
     database::db_fns::{
         db_read_messages, db_remove_contact, db_store_init_message, db_update_status_topoheight,
     },
     views::DbMessage,
-    wallet::wallet_fns::{wallet_send_message, DEV_FEE_AMOUNT},
-    Route, DB, IS_READY, WALLET,
+    wallet::wallet_fns::{DEV_FEE_AMOUNT, wallet_send_message},
 };
 use chrono::Utc;
 use chrono::{self, TimeZone};
-use daisy_rsx::{Button, ButtonSize, ButtonStyle, ButtonType};
 use dioxus::{logger::tracing::info, prelude::*};
 
 #[allow(
@@ -111,55 +110,57 @@ pub fn ChatView(name: String, address: String) -> Element {
     });
 
     rsx!(
-        div { button { onclick: move |_| {nav.push(Route::Home {});}, Button {class: "", popover_target: "set-name-drawer", "Back"} }}
-        div { a { "{contact_name()}" } }
-        div { a { "{contact_address()}" } }
-        div { a { "Topoheight: {topoheight()}" } }
-        div { a { "Last message fee: {last_msg_fee()}" } }
+    div { class:"h-screen w-full flex flex-col bg-black",
+            div { button { class:"text-green-600 hover:text-green-500", onclick: move |_| {nav.push(Route::Home {});}, button {class: "", "Back"} }}
+            div { class:"text-green-600", "{contact_name()}" }
+            div { class:"text-green-600", "{contact_address()}" }
+            div { class:"text-green-600", "Topoheight: {topoheight()}" }
+            div { class:"text-green-600", "Last message fee: {last_msg_fee()}" }
 
-        div {
-              form {
-                onsubmit: remove_contact,
-                button { r#type:"submit", "Delete Contact" }
-              }
-        }
-
-            for msg in messages_from_db.cloned().iter() {
-                if msg.message.is_some() {
-                    if msg.direction == "Outgoing" {
-                        div { class:"",
-                            div { class:"", a { class:"", "Topoheight: {msg.topoheight}" } }
-                            div { class:"",
-                                "{msg.message.as_ref().unwrap()}"
-                            }
-                            div { class:"", "{msg.status}" }
-                        }
-                    }
-                    else {
-                        div { class:"",
-                            div { class:"", a { class:"", "Topoheight: {msg.topoheight}" } }
-                            div { class:"",
-                                "{msg.message.as_ref().unwrap()}"
-                            }
-                            div { class:"", "{msg.status}" }
-                        }
-                    }
-
-                }
+            div {
+                  form {
+                    onsubmit: remove_contact,
+                    button {class:"text-green-600 hover:text-green-500", r#type:"submit", "Delete Contact" }
+                  }
             }
 
-        div {
-            form {
-                onsubmit: move |event| async move{
-                    event.prevent_default();
-                    subbmit_tx_message(event).await;
-                },
-            div { class:"flex flex-row gap-20",
-                  input { oninput: move |event| send_msg.set(event.value()), class:"",value:"{send_msg}",id:"message-input", placeholder:"type a message...", autofocus: true },
-                  button {class:"", disabled: !wallet_is_ready(), r#type:"submit", "Send"}
+                for msg in messages_from_db.cloned().iter() {
+                    if msg.message.is_some() {
+                        if msg.direction == "Outgoing" {
+                            div { class:"bg-green-950",
+                                div { class:"bg-green-600", a { class:"", "Topoheight: {msg.topoheight}" } }
+                                div { class:"bg-green-600",
+                                    "{msg.message.as_ref().unwrap()}"
+                                }
+                                div { class:"bg-green-600", "{msg.status}" }
+                            }
+                        }
+                        else {
+                            div { class:"bg-green-600",
+                                div { class:"bg-green-600", a { class:"", "Topoheight: {msg.topoheight}" } }
+                                div { class:"bg-green-600",
+                                    "{msg.message.as_ref().unwrap()}"
+                                }
+                                div { class:"bg-green-600", "{msg.status}" }
+                            }
+                        }
+
+                    }
+                }
+
+            div { class:"flex-1 overflow-auto p-4",
+                form {
+                    onsubmit: move |event| async move{
+                        event.prevent_default();
+                        subbmit_tx_message(event).await;
+                    },
+                    div { class:"flex flex-row",
+                      input {class:"text-green-600", oninput: move |event| send_msg.set(event.value()), class:"",value:"{send_msg}",id:"message-input", placeholder:"> type a secure message...", autofocus: true },
+                      button {class:"text-green-600 hover:text-green-500", disabled: !wallet_is_ready(), r#type:"submit", "Send"}
+                    }
                 }
             }
+            div { a {class:"bg-green-600", "{info()}" } }
         }
-        div { a { "{info()}" } }
     )
 }
