@@ -102,30 +102,6 @@ pub fn Home() -> Element {
     });
 
     rsx!(
-
-                // div { class:"navbar",
-                //     div { class:"navbar-start",
-                //         div { class:"dropdown",
-                //             div {"tabIndex":"0", role:"button", class:"btn",
-                //                 button { class:"btn color-black"}
-                //             }
-                //             ul { "tabIndex":"0", class:"",
-                //                 li {
-                //                     a {class:"text-xl", "{address.read()}"}
-                //                 }
-                //                 li {
-                //                     link {class:"",onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed Phrase"}
-                //                 }
-                //                 li { a { "Hompeage" } }
-                //             }
-                //         }
-                //     }
-                //     div { class:"navbar-center",
-                //         div { class:"", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
-                //         div { class:"", a {class:"", " | {topoheight.read()}"} }
-                //     }
-                //     div { class:"navbar-end"}
-                // } // nav end
                 div { class:"{sidebar} absolute bg-black text-green-600 outline-2 outline-green-700 w-80 min-h-screen overflow-y-auto transition-transform transform ease-in-out duration-300",
                       id:"sidebar",
                         div { class:"p-4",
@@ -163,7 +139,7 @@ pub fn Home() -> Element {
                             for contact in contacts_vec.read().iter().cloned() {
                                 // skip the default contact
                                 if DbContact::default() != contact {
-                                       button { class:"outline-2 outline-green-700 rounded-xl m-2 text-green-600 hover:outline-green-500 hover:text-green-500", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}" }
+                                       button { class:"outline-2 outline-green-700 rounded-xl p-4 mb-4 text-green-600 hover:outline-green-500 hover:text-green-500", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}" }
                                 }
                             }
 
@@ -218,14 +194,27 @@ pub fn AddContact() -> Element {
     };
 
     rsx!(
-    div { button { onclick: move |_| {nav.push(Route::Home {});}, "Back"}}
+
+                    div { class:"outline-2 outline-green-700 rounded-xl m-4",
+                            div { class:"container mx-auto",
+                                div { class:"flex justify-between items-center ",
+                                button { class:"text-xl font-semibold text-green-600 hover:text-green-500 p-4", id: "open-sidebar", onclick: move |_| {nav.push(Route::Home {});}, "<"}
+
+                        h1 { class:"text-xl font-semibold text-green-600", "Add Contact" }
+
+                        h1 { class:"text-xl", "" }
+                                    }
+                        }
+                }
+
           form {
-                class: "row",
+                class: "flex flex-col items-center p-4 ",
                 onsubmit: add_contact,
 
             div {
                     input {
                         id: "contact-name",
+                        class: "outline-2 outline-green-600 rounded-xl p-4 mb-4 text-green-600",
                         placeholder: "Enter contact name...",
                         value: "{contact_name}",
                         oninput: move |event| contact_name.set(event.value())
@@ -234,18 +223,17 @@ pub fn AddContact() -> Element {
             div {
                     input {
                         id: "contat-address",
+                        class: "outline-2 outline-green-600 rounded-xl p-4 mb-4 text-green-600",
                         placeholder: "Enter a wallet address...",
                         value: "{contact_address}",
                         oninput: move |event| contact_address.set(event.value())
                     },
                 }
             div {
-                    button { r#type: "submit", "Add Contact" }
+                    button { class:"outline-2 outline-green-500 rounded-xl hover:bg-green-600 text-green-600 hover:text-black p-4", r#type: "submit", "Add Contact" }
                 }
 
-            div {
-                a {"{contact_ret_msg.read()}"}
-            }
+            div {class:"text-green-600", "{contact_ret_msg.read()}"  }
             }
     )
 }

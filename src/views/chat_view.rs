@@ -110,57 +110,65 @@ pub fn ChatView(name: String, address: String) -> Element {
     });
 
     rsx!(
-    div { class:"h-screen w-full flex flex-col bg-black",
-            div { button { class:"text-green-600 hover:text-green-500", onclick: move |_| {nav.push(Route::Home {});}, button {class: "", "Back"} }}
-            div { class:"text-green-600", "{contact_name()}" }
-            div { class:"text-green-600", "{contact_address()}" }
-            div { class:"text-green-600", "Topoheight: {topoheight()}" }
-            div { class:"text-green-600", "Last message fee: {last_msg_fee()}" }
+        div {class:"flex flex-col ",
+                        header { class:"outline-2 outline-green-700 rounded-xl m-4",
+                                div { class:"container mx-auto",
+                                    div { class:"flex justify-between items-center ",
+                                    button { class:"text-xl font-semibold text-green-600 hover:text-green-500 p-4", id: "open-sidebar", onclick: move |_| {nav.push(Route::Home {});}, "<"}
 
-            div {
-                  form {
-                    onsubmit: remove_contact,
-                    button {class:"text-green-600 hover:text-green-500", r#type:"submit", "Delete Contact" }
-                  }
-            }
+                            h1 { class:"text-xl font-semibold text-green-600", "{contact_name()}" }
 
-                for msg in messages_from_db.cloned().iter() {
-                    if msg.message.is_some() {
-                        if msg.direction == "Outgoing" {
-                            div { class:"bg-green-950",
-                                div { class:"bg-green-600", a { class:"", "Topoheight: {msg.topoheight}" } }
-                                div { class:"bg-green-600",
-                                    "{msg.message.as_ref().unwrap()}"
-                                }
-                                div { class:"bg-green-600", "{msg.status}" }
+                            h1 { class:"text-xl text-green-600", "{topoheight()}" }
+                                        }
                             }
-                        }
-                        else {
-                            div { class:"bg-green-600",
-                                div { class:"bg-green-600", a { class:"", "Topoheight: {msg.topoheight}" } }
-                                div { class:"bg-green-600",
-                                    "{msg.message.as_ref().unwrap()}"
-                                }
-                                div { class:"bg-green-600", "{msg.status}" }
-                            }
-                        }
-
                     }
+                div { class:"text-green-600", "{contact_address()}" }
+                div { class:"text-green-600", "Last message fee: {last_msg_fee()}" }
+
+                div {
+                      form {
+                        onsubmit: remove_contact,
+                        button {class:"text-green-600 hover:text-green-500", r#type:"submit", "Delete Contact" }
+                      }
                 }
 
-            div { class:"flex-1 overflow-auto p-4",
-                form {
-                    onsubmit: move |event| async move{
-                        event.prevent_default();
-                        subbmit_tx_message(event).await;
-                    },
-                    div { class:"flex flex-row",
-                      input {class:"text-green-600", oninput: move |event| send_msg.set(event.value()), class:"",value:"{send_msg}",id:"message-input", placeholder:"> type a secure message...", autofocus: true },
-                      button {class:"text-green-600 hover:text-green-500", disabled: !wallet_is_ready(), r#type:"submit", "Send"}
+    main {class:"flex-1 overflow-auto outline-2 outline-green-600 rounded-xl m-4 h-full",
+                    for msg in messages_from_db.cloned().iter() {
+                        if msg.message.is_some() {
+                            if msg.direction == "Outgoing" {
+                                div { class:"",
+                                    a { class:"text-green-900 mx-2", "Topoheight: {msg.topoheight}" }
+                                    a { class:"text-green-900 mx-2", "{msg.status}" }
+                                    a { class:"text-green-600", "> {msg.message.as_ref().unwrap()}" }
+                                }
+                            }
+                            else {
+                                div { class:"bg-green-600",
+                                    div { class:"bg-green-600", a { class:"", "Topoheight: {msg.topoheight}" } }
+                                    div { class:"bg-green-600",
+                                        "{msg.message.as_ref().unwrap()}"
+                                    }
+                                    div { class:"bg-green-600", "{msg.status}" }
+                                }
+                            }
+
+                        }
                     }
-                }
+    }
+    footer { class:"fixed left-0 right-0 bottom-0 m-4",
+                    form {
+                        onsubmit: move |event| async move{
+                            event.prevent_default();
+                            subbmit_tx_message(event).await;
+                        },
+                        div { class:"flex",
+                          input {class:"outline-2 outline-green-600 rounded-xl p-4 text-green-600", oninput: move |event| send_msg.set(event.value()), class:"",value:"{send_msg}",id:"message-input", placeholder:"> type a secure message...", autofocus: true },
+                          button {class:"outline-2 outline-green-600 rounded-xl mx-4 p-4 text-green-600 hover:text-green-500", disabled: !wallet_is_ready(), r#type:"submit", "Send"}
+                        }
+                    }
+                div { a {class:"bg-green-600", "{info()}" } }
+
             }
-            div { a {class:"bg-green-600", "{info()}" } }
         }
-    )
+        )
 }
