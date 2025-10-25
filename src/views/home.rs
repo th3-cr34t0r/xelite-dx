@@ -100,53 +100,90 @@ pub fn Home() -> Element {
             }
         }
     });
-
     rsx!(
-                div { class:"{sidebar} absolute bg-black text-green-600 outline-2 outline-green-700 w-80 min-h-screen overflow-y-auto transition-transform transform ease-in-out duration-300",
-                      id:"sidebar",
-                        div { class:"p-4",
-                            div {  class:"flex justify-between",
-                            h1 { class:"text-2xl font-semibold p-4", "XELITE",
-                        }
-
-                            button { class:"p-4 text-xl text-green-600 hover:text-green-500", id: "open-sidebar", onclick: move |_| sidebar.set("hidden".to_string()), "<"}
+        div {
+            class: "{sidebar} absolute bg-black text-green-600 outline-2 outline-green-700 w-80 min-h-screen overflow-y-auto transition-transform transform ease-in-out duration-300",
+            id: "sidebar",
+            div {
+                class: "pt-4",
+                div {
+                    class: "flex justify-between",
+                    h1 {
+                        class: "text-2xl font-semibold p-4",
+                        "XELITE"
                     }
-                            ul { class:"mt-4",
-                                li { class:"mb-2", a { class:"block hover:text-green-500", "Profile" } }
-                                li { class:"mb-2", a { class:"block hover:text-green-500", "Settings" } }
-                                li { class:"mb-2", a { class:"block hover:text-green-500", "Info" } }
-                            }
-                            div { class:"absolute bottom-0 left-0 m-2 text-s text-green-900", "Xelite v0.0.1"}
-                        }
-                }
-
-                    div { class:"outline-2 outline-green-700 rounded-xl m-4",
-                            div { class:"container mx-auto",
-                                div { class:"flex justify-between items-center ",
-                                button { class:"text-xl font-semibold text-green-600 hover:text-green-500 p-4", id: "open-sidebar", onclick: move |_| sidebar.set("".to_string()), ">"}
-                        h1 { class:"text-xl font-semibold text-green-600", if *online_status.read() == "Online" { a {class:""} } else { a { class:"" } },  " {online_status.read()}" }
-
-                        h1 { class:"text-xl font-semibold text-green-600", "|" }
-
-                        h1 { class:"text-xl font-semibold text-green-600", "{topoheight.read()}"}
-                        h1 { class:"", "" }
-                                    }
-                        }
-                }
-
-    // main
-                div { class:"flex flex-col p-4",
-                            for contact in contacts_vec.read().iter().cloned() {
-                                // skip the default contact
-                                if DbContact::default() != contact {
-                                       button { class:"outline-2 outline-green-700 rounded-xl p-4 mb-4 text-green-600 hover:outline-green-500 hover:text-green-500", onclick:  move |_|  {nav.push(Route::ChatView {name: contact.name.clone(), address: contact.address.clone()});}, "{contact.name}" }
-                                }
-                            }
-
+                    button {
+                        class: "p-4 text-xl text-green-600 hover:text-green-500",
+                        id: "open-sidebar",
+                        onclick: move |_| sidebar.set("hidden".to_string()),
+                        "<"
                     }
-                        div { class:"absolute right-0 bottom-0 m-8", button { class:"outline-2 outline-green-500 rounded-xl size-16 hover:bg-green-600 text-green-600 hover:text-black", onclick: move |_| {nav.push(Route::AddContact {});}, "+" }}
+                }
+                ul {
+                    class: "m-4",
+                    li { class: "mb-2", button { class: "block hover:text-green-500", "Profile" } }
+                    li { class: "mb-2", button { class: "block hover:text-green-500", "Settings" } }
+                    li { class: "mb-2", button { class: "block hover:text-green-500", "Info" } }
+                }
+                div {
+                    class: "absolute bottom-0 left-0 m-2 text-s text-green-900",
+                    "Xelite v0.0.1"
+                }
+            }
+        }
 
-      )
+        div {
+            class: "outline-2 outline-green-700 rounded-xl m-4",
+            div {
+                class: "container mx-auto",
+                div {
+                    class: "flex justify-between items-center ",
+                    button {
+                        class: "text-xl font-semibold text-green-600 hover:text-green-500 p-4",
+                        id: "open-sidebar",
+                        onclick: move |_| sidebar.set("".to_string()),
+                        ">"
+                    }
+                    h1 {
+                        class: "text-xl font-semibold text-green-600",
+                        if *online_status.read() == "Online" {
+                            a { class: "" }
+                        } else {
+                            a { class: "" }
+                        },
+                        " {online_status.read()}"
+                    }
+                    h1 { class: "text-xl font-semibold text-green-600", "|" }
+                    h1 { class: "text-xl font-semibold text-green-600", "{topoheight.read()}" }
+                    h1 { class: "", "" }
+                }
+            }
+        }
+
+        // main
+        div {
+            class: "flex flex-col p-4",
+            for contact in contacts_vec.read().iter().cloned() {
+                // skip the default contact
+                if DbContact::default() != contact {
+                    button {
+                        class: "outline-2 outline-green-700 rounded-xl p-4 mb-4 text-green-600 hover:outline-green-500 hover:text-green-500",
+                        onclick: move |_| { nav.push(Route::ChatView { name: contact.name.clone(), address: contact.address.clone() }); },
+                        "{contact.name}"
+                    }
+                }
+            }
+        }
+
+        div {
+            class: "absolute right-0 bottom-0 m-8",
+            button {
+                class: "outline-2 outline-green-500 rounded-xl size-16 hover:bg-green-600 text-green-600 hover:text-black",
+                onclick: move |_| { nav.push(Route::AddContact {}); },
+                "+"
+            }
+        }
+    )
 }
 
 #[allow(
@@ -194,47 +231,69 @@ pub fn AddContact() -> Element {
     };
 
     rsx!(
-
-                    div { class:"outline-2 outline-green-700 rounded-xl m-4",
-                            div { class:"container mx-auto",
-                                div { class:"flex justify-between items-center ",
-                                button { class:"text-xl font-semibold text-green-600 hover:text-green-500 p-4", id: "open-sidebar", onclick: move |_| {nav.push(Route::Home {});}, "<"}
-
-                        h1 { class:"text-xl font-semibold text-green-600", "Add Contact" }
-
-                        h1 { class:"text-xl", "" }
-                                    }
-                        }
-                }
-
-          form {
-                class: "flex flex-col items-center p-4 ",
-                onsubmit: add_contact,
-
+        div {
+            class: "outline-2 outline-green-700 rounded-xl mx-4 mt-4",
             div {
-                    input {
-                        id: "contact-name",
-                        class: "outline-2 outline-green-600 rounded-xl p-4 mb-4 text-green-600",
-                        placeholder: "Enter contact name...",
-                        value: "{contact_name}",
-                        oninput: move |event| contact_name.set(event.value())
+                class: "container mx-auto",
+                div {
+                    class: "flex justify-between items-center ",
+                    button {
+                        class: "text-xl font-semibold text-green-600 hover:text-green-500 p-4",
+                        id: "open-sidebar",
+                        onclick: move |_| { nav.push(Route::Home {}); },
+                        "<"
+                    }
+                    h1 {
+                        class: "text-xl font-semibold text-green-600",
+                        "Add Contact"
+                    }
+                    h1 {
+                        class: "text-xl",
+                        ""
                     }
                 }
-            div {
-                    input {
-                        id: "contat-address",
-                        class: "outline-2 outline-green-600 rounded-xl p-4 mb-4 text-green-600",
-                        placeholder: "Enter a wallet address...",
-                        value: "{contact_address}",
-                        oninput: move |event| contact_address.set(event.value())
-                    },
-                }
-            div {
-                    button { class:"outline-2 outline-green-500 rounded-xl hover:bg-green-600 text-green-600 hover:text-black p-4", r#type: "submit", "Add Contact" }
-                }
-
-            div {class:"text-green-600", "{contact_ret_msg.read()}"  }
             }
+        }
+    div {
+        class: "h-screen flex items-center justify-center",
+        form {
+            class: "p-4 w-full max-w-md",
+            onsubmit: add_contact,
+            div {
+                class: "flex",
+                input {
+                    id: "contact-name",
+                    class: "grow outline-2 outline-green-600 rounded-xl p-4 mb-4 text-green-600",
+                    placeholder: "Enter contact name...",
+                    value: "{contact_name}",
+                    oninput: move |event| contact_name.set(event.value())
+                }
+            }
+            div {
+                class: "flex",
+                input {
+                    id: "contat-address",
+                    class: "grow outline-2 outline-green-600 rounded-xl p-4 mb-4 text-green-600",
+                    placeholder: "Enter a wallet address...",
+                    value: "{contact_address}",
+                    oninput: move |event| contact_address.set(event.value())
+                }
+            }
+            div {
+                class: "flex justify-center",
+                button {
+                    class: "outline-2 outline-green-500 rounded-xl hover:bg-green-600 text-green-600 hover:text-black p-4",
+                    r#type: "submit",
+                    "Add Contact"
+                }
+            }
+            div {
+                class: "text-green-600",
+                "{contact_ret_msg.read()}"
+            }
+        }
+    }
+
     )
 }
 
