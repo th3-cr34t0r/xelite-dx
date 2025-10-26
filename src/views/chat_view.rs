@@ -122,12 +122,13 @@ pub fn ChatView(name: String, address: String) -> Element {
                         onclick: move |_| { nav.push(Route::Home {}); },
                         "<"
                     }
-                    h1 {
-                        class: "text-xl font-semibold text-green-600",
+                    button {
+                        class: "text-xl font-semibold text-green-600 hover:text-green-500",
+                        onclick: move |_| {},
                         "{contact_name()}"
                     }
                     h1 {
-                        class: "text-xl text-green-600",
+                        class: "text-xl text-green-600 m-4",
                         "{topoheight()}"
                     }
                 }

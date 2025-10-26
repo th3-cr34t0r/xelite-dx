@@ -185,9 +185,6 @@
   .absolute {
     position: absolute;
   }
-  .fixed {
-    position: fixed;
-  }
   .relative {
     position: relative;
   }
@@ -202,6 +199,9 @@
   }
   .left-0 {
     left: calc(var(--spacing) * 0);
+  }
+  .col-span-3 {
+    grid-column: span 3 / span 3;
   }
   .container {
     width: 100%;
@@ -221,9 +221,6 @@
       max-width: 96rem;
     }
   }
-  .m-1 {
-    margin: calc(var(--spacing) * 1);
-  }
   .m-2 {
     margin: calc(var(--spacing) * 2);
   }
@@ -232,9 +229,6 @@
   }
   .m-8 {
     margin: calc(var(--spacing) * 8);
-  }
-  .mx-1 {
-    margin-inline: calc(var(--spacing) * 1);
   }
   .mx-2 {
     margin-inline: calc(var(--spacing) * 2);
@@ -250,9 +244,6 @@
   }
   .mr-4 {
     margin-right: calc(var(--spacing) * 4);
-  }
-  .mb-1 {
-    margin-bottom: calc(var(--spacing) * 1);
   }
   .mb-2 {
     margin-bottom: calc(var(--spacing) * 2);
@@ -318,6 +309,12 @@
   .resize {
     resize: both;
   }
+  .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .flex-col {
     flex-direction: column;
   }
@@ -336,14 +333,11 @@
   .justify-items-center {
     justify-items: center;
   }
+  .gap-4 {
+    gap: calc(var(--spacing) * 4);
+  }
   .justify-self-center {
     justify-self: center;
-  }
-  .justify-self-end {
-    justify-self: flex-end;
-  }
-  .justify-self-start {
-    justify-self: flex-start;
   }
   .overflow-auto {
     overflow: auto;
@@ -363,9 +357,6 @@
   }
   .bg-green-600 {
     background-color: var(--color-green-600);
-  }
-  .object-bottom {
-    object-position: bottom;
   }
   .p-2 {
     padding: calc(var(--spacing) * 2);

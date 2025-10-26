@@ -1,3 +1,5 @@
+use std::str::SplitWhitespace;
+
 use crate::{
     DB, Route, WALLET,
     database::db_fns::{db_add_contact, db_read_contacts, db_store_init_message},
@@ -121,7 +123,7 @@ pub fn Home() -> Element {
                 }
                 ul {
                     class: "m-4",
-                    li { class: "mb-2", button { class: "block hover:text-green-500", "Profile" } }
+                    li { class: "mb-2", button { class: "block hover:text-green-500", onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed" } }
                     li { class: "mb-2", button { class: "block hover:text-green-500", "Settings" } }
                     li { class: "mb-2", button { class: "block hover:text-green-500", "Info" } }
                 }
@@ -307,38 +309,88 @@ pub fn ViewSeed() -> Element {
     let nav = navigator();
 
     let mut user_password = use_signal(|| String::new());
-    let mut seed_phrase_info = use_signal(|| String::new());
+    let mut seed_phrase = use_signal(|| String::new());
 
     let get_seed_phrase = move |_: FormEvent| async move {
         let entered_password = user_password.read().clone();
 
         match &*DB.read() {
-            Some(db) => wallet_get_seed(db, entered_password, &mut seed_phrase_info).await,
+            Some(db) => {
+                wallet_get_seed(db, entered_password, &mut seed_phrase).await;
+            }
             None => {
                 info!("DB not accessible");
-                seed_phrase_info.set("DB not accessible".to_string());
+                seed_phrase.set("DB not accessible".to_string());
             }
         }
     };
 
     rsx!(
-        div { button { onclick: move |_| {nav.push(Route::Home {});}, "Back"}}
-        div { "SEED: {seed_phrase_info.read()}" }
-
-        form {
-              class: "provide_seed",
-              onsubmit: get_seed_phrase,
-
           div {
-                  input {
-                      id: "password",
-                      placeholder: "Enter account password...",
-                      value: "{user_password}",
-                      oninput: move |event| user_password.set(event.value())
+              class: "outline-2 outline-green-700 rounded-xl mx-4 mt-4",
+              div {
+                  class: "container mx-auto",
+                  div {
+                      class: "flex justify-between items-center ",
+                      button {
+                          class: "text-xl font-semibold text-green-600 hover:text-green-500 p-4",
+                          id: "go-home",
+                          onclick: move |_| { nav.push(Route::Home {}); },
+                          "<"
+                      }
+                      h1 {
+                          class: "text-xl font-semibold text-green-600",
+                          "Get Seed Phrase"
+                      }
+                      h1 {
+                          class: "text-xl",
+                          ""
+                      }
                   }
-
-                    button { r#type: "submit", "Get Seed" }
               }
           }
+      div {
+          class: "grid grid-cols-3 m-4 gap-4",
+          if seed_phrase().len() < 100 && !seed_phrase().is_empty() {
+              div {
+                  class: "col-span-3 justify-self-center outline-2 outline-green-600 rounded-xl p-2 mb-4 text-green-600",
+                  "{seed_phrase()}"
+              }
+          }
+          else {
+               for (i, word) in seed_phrase().split_whitespace().enumerate() {
+                   div {
+                       class: "outline-2 outline-green-600 rounded-xl p-2 mb-4 text-green-600",
+                       "{i}. {word}"
+                   }
+               }
+          }
+      }
+
+      div {
+          class: "h-screen flex items-center justify-center",
+          form {
+               class: "p-4 w-full max-w-md",
+               onsubmit: get_seed_phrase,
+               div {
+                   class: "flex",
+                   input {
+                         id: "account-password",
+                         class: "grow outline-2 outline-green-600 rounded-xl p-4 mb-4 text-green-600",
+                         placeholder: "Enter account password...",
+                         value: "{user_password}",
+                         oninput: move |event| user_password.set(event.value())
+                   }
+               }
+               div {
+                   class: "flex justify-center",
+                   button {
+                          class: "outline-2 outline-green-500 rounded-xl hover:bg-green-600 text-green-600 hover:text-black p-4",
+                          r#type: "submit",
+                          "Get Seed"
+                   }
+               }
+          }
+      }
     )
 }

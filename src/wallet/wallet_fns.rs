@@ -1,14 +1,14 @@
 use crate::{
-    database::db_fns::{db_store_init_message, db_update_status_fee, DbUserLogin},
-    views::DbMessage,
     WALLET,
+    database::db_fns::{DbUserLogin, db_store_init_message, db_update_status_fee},
+    views::DbMessage,
 };
 use dioxus::{
     hooks::UseFuture,
     logger::tracing::info,
     signals::{Readable, Signal, Writable},
 };
-use sqlx::{query_as, Error, SqlitePool};
+use sqlx::{Error, SqlitePool, query_as};
 use xelis_common::{config::XELIS_ASSET, utils::format_xelis};
 
 use super::utils::Transfer;
