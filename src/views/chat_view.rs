@@ -61,7 +61,7 @@ pub fn ChatView(name: String, address: String) -> Element {
 
             wallet_send_message(
                 contact_address.read().clone(),
-                *topoheight.read(),
+                topoheight(),
                 message,
                 &mut db_message_handle,
                 &mut info,

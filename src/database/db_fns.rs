@@ -51,15 +51,23 @@ pub async fn db_open_wallet() {
 
     match &*DB.read() {
         Some(db) => {
-            // fetch user db entry
-            let db_user: Result<DbUserLogin, Error> =
-                query_as("SELECT username, password FROM user")
-                    .fetch_one(&*db)
-                    .await;
+            // create base table if it does not exist
+            query(
+                "CREATE TABLE IF NOT EXISTS user ( username TEXT NOT NULL, password TEXT NOT NULL )",
+            )
+            .execute(&*db)
+            .await
+            .expect("Cannot create DB");
+
+            // fetch user db entry (optional — fresh install has no users yet)
+            let db_user: Option<DbUserLogin> = query_as("SELECT username, password FROM user")
+                .fetch_optional(&*db)
+                .await
+                .expect("Cannot query user table");
 
             // in case there is a user in the db, open their wallet
             match db_user {
-                Ok(db_user) => {
+                Some(db_user) => {
                     // try to open the stored wallet
                     match ChatWallet::open_wallet(
                         db_user.username,
@@ -82,9 +90,8 @@ pub async fn db_open_wallet() {
                         }
                     }
                 }
-                Err(e) => {
-                    info!("Wallet error: {e}");
-
+                None => {
+                    // No registered user yet — fresh install, route to account creation
                     nav.push(Route::RestoreWalletOptions {});
                 }
             }

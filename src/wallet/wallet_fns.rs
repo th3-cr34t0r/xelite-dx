@@ -6,7 +6,8 @@ use crate::{
 use dioxus::{
     hooks::UseFuture,
     logger::tracing::info,
-    signals::{Readable, Signal, Writable},
+    prelude::{ReadableExt, WritableExt},
+    signals::Signal,
 };
 use sqlx::{Error, SqlitePool, query_as};
 use xelis_common::{config::XELIS_ASSET, utils::format_xelis};
@@ -14,7 +15,12 @@ use xelis_common::{config::XELIS_ASSET, utils::format_xelis};
 use super::utils::Transfer;
 
 static DEV_FEE_ADDRESS: &str = "xet:gqef8a3qusf476lcqv0f4us947swgf38yrrs3x9npltjzh7mrcrqqgvgex3"; // testnet
+// Mainnet fee address (uncomment and update for production):
+// static DEV_FEE_ADDRESS: &str = "xel:...";
 pub static DEV_FEE_AMOUNT: f64 = 0.01;
+
+/// Set to `true` to include a dev fee in every transaction. Default `false` for testing.
+pub const INCLUDE_DEV_FEE: bool = false;
 
 #[allow(
     clippy::redundant_closure,
@@ -96,27 +102,36 @@ pub async fn wallet_send_message(
     // reload database
     db_message_handle.restart();
 
-    let dev_transfer = Transfer {
-        float_amount: DEV_FEE_AMOUNT,
-        str_address: DEV_FEE_ADDRESS.to_string(),
-        asset_hash: XELIS_ASSET.to_string(),
-        extra_data: None,
-    };
+    // build transfers — dev fee is optional (controlled by INCLUDE_DEV_FEE)
+    let mut transfers: Vec<Transfer> = vec![];
 
-    let msg_transfer = Transfer {
+    if INCLUDE_DEV_FEE {
+        transfers.push(Transfer {
+            float_amount: DEV_FEE_AMOUNT,
+            str_address: DEV_FEE_ADDRESS.to_string(),
+            asset_hash: XELIS_ASSET.to_string(),
+            extra_data: None,
+        });
+    }
+
+    transfers.push(Transfer {
         float_amount: 0.0,
         str_address: contact_address.clone(),
         asset_hash: XELIS_ASSET.to_string(),
         extra_data: db_message.message.clone(),
-    };
-
-    // create the vector of transfers
-    let transfers = vec![dev_transfer, msg_transfer];
+    });
 
     // get wallet handle
     match &*WALLET.read() {
         Some(wallet_rw) => {
             let mut wallet = wallet_rw.write().await;
+
+            // check that the wallet has balance data before attempting to send
+            if let Err(e) = wallet.get_balance().await {
+                info!("Wallet balance not available: {e}");
+                info.set("Wallet is still syncing with the network. Please wait a moment and try again.".to_string());
+                return;
+            }
 
             match wallet.create_transfers_transaction(transfers).await {
                 Ok(transaction_summary) => {

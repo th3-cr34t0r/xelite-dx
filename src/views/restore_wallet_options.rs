@@ -6,153 +6,262 @@ pub fn RestoreWalletOptions() -> Element {
     let nav = navigator();
 
     rsx!(
-        button {onclick: move |_| {nav.push(Route::CreateNewWallet {});}, type:"button", "Create New Wallet"},
-        button {onclick: move |_| {nav.push(Route::RestoreFromSeed {});}, type:"button", "Restore from Seed"},
-        button {onclick: move |_| {nav.push(Route::RestoreFromPrivateKey {});}, type:"button", "Restore from Private Key"},
+        div {
+            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
+            h1 {
+                style: "font-size:32px; font-weight:bold; margin-bottom:8px;",
+                "Xelite DX"
+            }
+            p { style: "color:#9ca3af; margin-bottom:40px;", "Wallet Setup" }
+
+            button {
+                style: "width:100%; max-width:24rem; padding:12px 24px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
+                onclick: move |_| { nav.push(Route::CreateNewWallet {}); },
+                type: "button",
+                "+ Create New Wallet"
+            }
+
+            button {
+                style: "width:100%; max-width:24rem; padding:12px 24px; background-color:#1f2937; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer; margin-top:16px;",
+                onclick: move |_| { nav.push(Route::RestoreFromSeed {}); },
+                type: "button",
+                "🌱 Restore from Seed Phrase"
+            }
+
+            button {
+                style: "width:100%; max-width:24rem; padding:12px 24px; background-color:#1f2937; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer; margin-top:16px;",
+                onclick: move |_| { nav.push(Route::RestoreFromPrivateKey {}); },
+                type: "button",
+                "🔑 Restore from Private Key"
+            }
+        }
     )
 }
 
-#[allow(clippy::redundant_closure)]
 #[component]
 pub fn CreateNewWallet() -> Element {
     let mut wallet_name = use_signal(|| String::new());
     let mut wallet_password = use_signal(|| String::new());
     let mut wallet_msg = use_signal(|| String::new());
+    let nav = navigator();
 
     let create_wallet = move |_: FormEvent| async move {
         let name = wallet_name.read().clone();
         let password = wallet_password.read().clone();
 
-        // if the name and password are not empty
         if !name.is_empty() && !password.is_empty() {
-            // store the info as a wallet login
+            wallet_msg.set("Creating wallet...".to_string());
             db_restore_wallet(name, password, None, None).await;
+        } else {
+            wallet_msg.set("Please fill in all fields".to_string());
         }
     };
 
     rsx!(
         div {
+            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
+
+            button {
+                style: "color:#9ca3af; margin-bottom:24px; background:none; border:none; cursor:pointer; font-size:14px; align-self:flex-start; max-width:24rem; width:100%;",
+                onclick: move |_| { nav.push(Route::RestoreWalletOptions {}); },
+                type: "button",
+                "← Back"
+            }
+
+            h1 { style: "font-size:28px; font-weight:bold; margin-bottom:32px;", "Create New Wallet" }
+
             form {
-                class: "row",
+                style: "display:flex; flex-direction:column; gap:16px; width:100%; max-width:24rem; background-color:#111827; padding:24px; border-radius:12px;",
                 onsubmit: create_wallet,
 
-                input {
-                    id: "wallet-name-input",
-                    placeholder: "Enter a wallet name...",
-                    value: "{wallet_name}",
-                    oninput: move |event| wallet_name.set(event.value())
-                },
-
-                input {
-                    id: "wallet-password-input",
-                    placeholder: "Enter wallet password...",
-                    value: "{wallet_password}",
-                    oninput: move |event| wallet_password.set(event.value())
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Wallet Name"
+                    input {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
+                        placeholder: "Enter a wallet name...",
+                        value: "{wallet_name}",
+                        oninput: move |event| wallet_name.set(event.value())
+                    }
                 }
-                button { r#type: "submit", "Create Wallet" }
+
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Password"
+                    input {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
+                        r#type: "password",
+                        placeholder: "Enter wallet password...",
+                        value: "{wallet_password}",
+                        oninput: move |event| wallet_password.set(event.value())
+                    }
+                }
+
+                button {
+                    style: "padding:12px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
+                    r#type: "submit",
+                    "Create Wallet"
+                }
             }
-            p { "{wallet_msg.read()}" }
+
+            if !wallet_msg.read().is_empty() {
+                p { style: "margin-top:16px; color:#d1d5db; text-align:center;", "{wallet_msg.read()}" }
+            }
         }
     )
 }
 
-#[allow(clippy::redundant_closure)]
 #[component]
 pub fn RestoreFromSeed() -> Element {
     let mut wallet_name = use_signal(|| String::new());
     let mut wallet_password = use_signal(|| String::new());
     let mut wallet_seed = use_signal(|| String::new());
+    let nav = navigator();
 
     let restore_wallet = move |_: FormEvent| async move {
         let name = wallet_name.read().clone();
         let password = wallet_password.read().clone();
-        let wallet_seed = wallet_seed.read().clone();
+        let seed = wallet_seed.read().clone();
 
-        // if the name and password are not empty
-        if !name.is_empty() && !password.is_empty() {
-            // store the info as a wallet login
-            db_restore_wallet(name, password, Some(wallet_seed), None).await;
+        if !name.is_empty() && !password.is_empty() && !seed.is_empty() {
+            db_restore_wallet(name, password, Some(seed), None).await;
+        } else {
+            info!("Please fill in all fields");
         }
     };
 
     rsx!(
         div {
+            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
+
+            button {
+                style: "color:#9ca3af; margin-bottom:24px; background:none; border:none; cursor:pointer; font-size:14px; align-self:flex-start; max-width:24rem; width:100%;",
+                onclick: move |_| { nav.push(Route::RestoreWalletOptions {}); },
+                type: "button",
+                "← Back"
+            }
+
+            h1 { style: "font-size:28px; font-weight:bold; margin-bottom:8px;", "Restore from Seed Phrase" }
+            p { style: "color:#9ca3af; font-size:14px; margin-bottom:32px;", "Enter your 12 or 24-word seed phrase" }
+
             form {
-                class: "row",
+                style: "display:flex; flex-direction:column; gap:16px; width:100%; max-width:24rem; background-color:#111827; padding:24px; border-radius:12px;",
                 onsubmit: restore_wallet,
 
-                input {
-                    id: "wallet-name-input",
-                    placeholder: "Enter a wallet name...",
-                    value: "{wallet_name}",
-                    oninput: move |event| wallet_name.set(event.value())
-                },
-
-                input {
-                    id: "wallet-password-input",
-                    placeholder: "Enter wallet password...",
-                    value: "{wallet_password}",
-                    oninput: move |event| wallet_password.set(event.value())
-                },
-
-                input {
-                    id: "wallet-seed-input",
-                    placeholder: "Enter wallet seed...",
-                    value: "{wallet_seed}",
-                    oninput: move |event| wallet_seed.set(event.value())
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Wallet Name"
+                    input {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
+                        placeholder: "Enter a wallet name...",
+                        value: "{wallet_name}",
+                        oninput: move |event| wallet_name.set(event.value())
+                    }
                 }
-                button { r#type: "submit", "Restore Wallet" }
+
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Password"
+                    input {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
+                        r#type: "password",
+                        placeholder: "Enter wallet password...",
+                        value: "{wallet_password}",
+                        oninput: move |event| wallet_password.set(event.value())
+                    }
+                }
+
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Seed Phrase"
+                    textarea {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none; resize:vertical;",
+                        rows: 3,
+                        placeholder: "word1 word2 word3 ...",
+                        value: "{wallet_seed}",
+                        oninput: move |event| wallet_seed.set(event.value())
+                    }
+                }
+
+                button {
+                    style: "padding:12px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
+                    r#type: "submit",
+                    "Restore Wallet"
+                }
             }
         }
     )
 }
 
-#[allow(clippy::redundant_closure)]
 #[component]
 pub fn RestoreFromPrivateKey() -> Element {
     let mut wallet_name = use_signal(|| String::new());
     let mut wallet_password = use_signal(|| String::new());
     let mut wallet_private_key = use_signal(|| String::new());
+    let nav = navigator();
 
     let restore_wallet = move |_: FormEvent| async move {
         let name = wallet_name.read().clone();
         let password = wallet_password.read().clone();
-        let wallet_private_key = wallet_private_key.read().clone();
+        let key = wallet_private_key.read().clone();
 
-        // if the name and password are not empty
-        if !name.is_empty() && !password.is_empty() {
-            // store the info as a wallet login
-            db_restore_wallet(name, password, None, Some(wallet_private_key)).await;
+        if !name.is_empty() && !password.is_empty() && !key.is_empty() {
+            db_restore_wallet(name, password, None, Some(key)).await;
+        } else {
+            info!("Please fill in all fields");
         }
     };
 
     rsx!(
         div {
+            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
+
+            button {
+                style: "color:#9ca3af; margin-bottom:24px; background:none; border:none; cursor:pointer; font-size:14px; align-self:flex-start; max-width:24rem; width:100%;",
+                onclick: move |_| { nav.push(Route::RestoreWalletOptions {}); },
+                type: "button",
+                "← Back"
+            }
+
+            h1 { style: "font-size:28px; font-weight:bold; margin-bottom:8px;", "Restore from Private Key" }
+            p { style: "color:#9ca3af; font-size:14px; margin-bottom:32px;", "⚠️ Keep your private key secret" }
+
             form {
-                class: "row",
+                style: "display:flex; flex-direction:column; gap:16px; width:100%; max-width:24rem; background-color:#111827; padding:24px; border-radius:12px;",
                 onsubmit: restore_wallet,
 
-                input {
-                    id: "wallet-name-input",
-                    placeholder: "Enter a wallet name...",
-                    value: "{wallet_name}",
-                    oninput: move |event| wallet_name.set(event.value())
-                },
-
-                input {
-                    id: "wallet-password-input",
-                    placeholder: "Enter wallet password...",
-                    value: "{wallet_password}",
-                    oninput: move |event| wallet_password.set(event.value())
-                },
-
-                input {
-                    id: "wallet-private-key-input",
-                    placeholder: "Enter wallet private key...",
-                    value: "{wallet_private_key}",
-                    oninput: move |event| wallet_private_key.set(event.value())
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Wallet Name"
+                    input {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
+                        placeholder: "Enter a wallet name...",
+                        value: "{wallet_name}",
+                        oninput: move |event| wallet_name.set(event.value())
+                    }
                 }
-                button { r#type: "submit", "Restore Wallet" }
+
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Password"
+                    input {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
+                        r#type: "password",
+                        placeholder: "Enter wallet password...",
+                        value: "{wallet_password}",
+                        oninput: move |event| wallet_password.set(event.value())
+                    }
+                }
+
+                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
+                    "Private Key"
+                    input {
+                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
+                        r#type: "password",
+                        placeholder: "Enter your private key...",
+                        value: "{wallet_private_key}",
+                        oninput: move |event| wallet_private_key.set(event.value())
+                    }
+                }
+
+                button {
+                    style: "padding:12px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
+                    r#type: "submit",
+                    "Restore Wallet"
+                }
             }
         }
     )

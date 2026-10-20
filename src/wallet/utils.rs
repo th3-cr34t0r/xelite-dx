@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
 use dioxus::logger::tracing::info;
 use log::{error, warn};
@@ -9,15 +9,15 @@ use std::{
 };
 use xelis_common::{
     api::{
-        wallet::{BaseFeeMode, EntryType, TransactionEntry},
         DataElement, DataValue,
+        wallet::{BaseFeeMode, EntryType, TransactionEntry},
     },
     config::{COIN_DECIMALS, XELIS_ASSET},
     crypto::{Address, Hash, Hashable},
     serializer::Serializer,
     transaction::{
-        builder::{FeeBuilder, TransactionTypeBuilder, TransferBuilder},
         Transaction,
+        builder::{FeeBuilder, TransactionTypeBuilder, TransferBuilder},
     },
     utils::{format_coin, format_xelis},
 };
@@ -25,23 +25,20 @@ use xelis_wallet::{
     config::LogProgressTableGenerationReportFunction,
     entry::EntryData,
     precomputed_tables::{self, L1_FULL, L1_LOW, L1_MEDIUM},
+    storage::TransactionFilterOptions,
     transaction_builder::TransactionBuilderState,
     wallet::{Event, RecoverOption, Wallet},
 };
 
 pub use xelis_common::network::Network;
 
-use crate::{
-    database::db_fns::{db_update_status_fee, db_update_status_topoheight},
-    views::DbMessage,
-    IS_READY,
-};
+use crate::views::DbMessage;
 
-// pub const NODE_ENDPOINT: &str = "node.xelis.io"; //mainnet
-// pub static NETWORK: Network = Network::Mainnet; //mainnet
+pub const NODE_ENDPOINT: &str = "node.xelis.io"; //mainnet
+pub static NETWORK: Network = Network::Mainnet; //mainnet
 
-pub const NODE_ENDPOINT: &str = "testnet-node.xelis.io"; //testnet
-pub static NETWORK: Network = Network::Testnet; //testnet
+// pub const NODE_ENDPOINT: &str = "testnet-node.xelis.io"; //testnet
+// pub static NETWORK: Network = Network::Testnet; //testnet
 
 // pub const NODE_ENDPOINT: &str = "192.168.100.7:8080"; // local
 
@@ -132,11 +129,16 @@ impl ChatWallet {
         precomputed_tables_path: Option<String>,
         precomputed_table_size: Option<TableSize>,
     ) -> Result<ChatWallet> {
-        // recover wallet by seed or private_key
-        let seed: Option<RecoverOption> = if let Some(seed) = seed.as_deref() {
-            Some(RecoverOption::Seed(seed))
+        // recover wallet by seed or private_key, or create new if neither provided
+        let seed: RecoverOption = if let Some(seed) = seed.as_deref() {
+            info!("recovering wallet from seed");
+            RecoverOption::Seed(seed)
+        } else if let Some(private_key) = private_key.as_deref() {
+            info!("recovering wallet from private key");
+            RecoverOption::PrivateKey(private_key)
         } else {
-            private_key.as_deref().map(RecoverOption::PrivateKey)
+            info!("creating new wallet");
+            RecoverOption::None
         };
 
         // get the size conversion or default
@@ -228,7 +230,7 @@ impl ChatWallet {
         })
     }
 
-    async fn process_incoming_tx(&self, transaction: TransactionEntry) -> DbMessage {
+    async fn process_incoming_tx(&self, transaction: TransactionEntry<'_>) -> DbMessage {
         let mut rx_message = DbMessage {
             status: "Received".to_string(),
             direction: "Incoming".to_string(),
@@ -251,7 +253,7 @@ impl ChatWallet {
                 rx_message.asset = transfer_in.asset.to_string();
                 rx_message.amount = transfer_in.amount as i64;
 
-                rx_message.message = match transfer_in.extra_data.clone() {
+                rx_message.message = match &*transfer_in.extra_data.clone() {
                     Some(extra_data) => extra_data.data().map(|extra_data| {
                         extra_data.clone().to_value().unwrap().to_string().unwrap()
                     }),
@@ -265,17 +267,37 @@ impl ChatWallet {
 
     #[allow(clippy::await_holding_invalid_type)]
     pub async fn backgroud_daemon(&mut self) {
+        // Read balance from storage, cloning the result so we can release the borrow
+        let wallet = self.get_wallet().await;
+        let new_balance: Option<String> = {
+            let storage = wallet.get_storage().read().await;
+            if let Ok(balance_data) = storage.get_plaintext_balance_for(&XELIS_ASSET).await {
+                Some(format_xelis(balance_data))
+            } else {
+                None
+            }
+        };
+
+        if let Some(formatted) = new_balance {
+            if self.balance != formatted {
+                info!("Balance from storage: {}", formatted);
+                self.balance = formatted;
+            }
+        }
+
+        // Process events with a non-blocking timeout
         let wallet = self.get_wallet().await;
         let mut receiver = wallet.subscribe_events().await;
+        let event_result =
+            tokio::time::timeout(std::time::Duration::from_millis(10), receiver.recv()).await;
 
-        if let Ok(event) = receiver.recv().await {
+        if let Ok(Ok(event)) = event_result {
             match event {
                 Event::NewTransaction(transaction) => {
                     info!("NewTransaction");
 
-                    let mut processed_tx = self.process_incoming_tx(transaction.clone()).await;
+                    let processed_tx = self.process_incoming_tx(transaction.clone()).await;
 
-                    // only store tranactions with messages
                     if processed_tx.message.is_some() {
                         self.rx_messages.push(processed_tx);
                     } else if let Some(index) = self
@@ -284,23 +306,17 @@ impl ChatWallet {
                         .position(|hash| *hash == processed_tx.hash)
                     {
                         let _ = self.sent_tx_hashes.remove(index);
-
-                        processed_tx.status = "Received".to_string();
-
-                        self.confirmed_messages.push(processed_tx);
-                    } else {
-
-                        // only balance has changed
+                        let mut tx = processed_tx;
+                        tx.status = "Received".to_string();
+                        self.confirmed_messages.push(tx);
                     }
 
                     info!("WalletTransactions: {:#?}", self.rx_messages);
                 }
                 Event::NewTopoHeight { topoheight } => {
-                    info!("NewTopoHeight: {topoheight}");
                     self.topoheight = topoheight as i64;
                 }
                 Event::BalanceChanged(new_balance) => {
-                    info!("BalanceChanged: {new_balance:?}");
                     if new_balance.asset == XELIS_ASSET {
                         self.balance = format_xelis(new_balance.balance);
                     }
@@ -324,20 +340,26 @@ impl ChatWallet {
 
         let mut data_vec: Vec<String> = vec![String::new()];
 
+        let options: TransactionFilterOptions = TransactionFilterOptions {
+            address: Some(std::borrow::Cow::Borrowed(wallet_public_key)),
+            asset: Some(std::borrow::Cow::Borrowed(&XELIS_ASSET)),
+            contract: None,
+            min_topoheight: Some(min_topoheight),
+            max_topoheight: None,
+            min_timestamp: None,
+            max_timestamp: None,
+            accept_incoming: true,
+            accept_outgoing: true,
+            accept_coinbase: false,
+            accept_blob: false,
+            accept_burn: false,
+            query: None,
+            limit: None,
+            skip: None,
+        };
+
         // load wallet txs
-        if let Ok(txs) = storage.read().await.get_filtered_transactions(
-            Some(wallet_public_key),
-            Some(&XELIS_ASSET),
-            Some(min_topoheight),
-            None,
-            true,
-            false,
-            false,
-            false,
-            None,
-            None,
-            None,
-        ) {
+        if let Ok(txs) = storage.read().await.get_filtered_transactions(options) {
             for tx in txs.iter() {
                 if let EntryData::Incoming { from, transfers } = tx.get_entry().clone() {
                     if from.to_address(false).to_string() == contact_address {
@@ -571,7 +593,9 @@ impl ChatWallet {
                 bail!(e)
             } else {
                 info!("Transaction submitted successfully!");
-                state.apply_changes(&mut storage).await?;
+                state
+                    .apply_changes(&mut storage, &self.wallet, Some(&tx))
+                    .await?;
                 info!("Transaction applied to storage");
             }
         } else {
@@ -617,7 +641,10 @@ impl ChatWallet {
     /// Private method that converts float amout to atomic format
     async fn convert_float_amount(&self, float_amount: f64, asset: &Hash) -> Result<u64> {
         let storage = self.wallet.get_storage().read().await;
-        let decimals = storage.get_asset(asset).await?.get_decimals();
+        let decimals = match storage.get_asset(asset).await {
+            Ok(asset_info) => asset_info.get_decimals(),
+            Err(_) => COIN_DECIMALS, // fallback for native XELIS asset
+        };
         let amount = (float_amount * 10u32.pow(decimals as u32) as f64) as u64;
         Ok(amount)
     }
