@@ -7,7 +7,20 @@ use sqlx::{
 pub mod chat_view;
 pub mod home;
 pub mod restore_wallet_options;
+pub mod sidebar;
 pub mod splashscreen;
+pub mod theme;
+
+/// Conversation row: contact + last-message preview
+#[derive(Clone, PartialEq, Default)]
+pub struct ContactRow {
+    pub name: String,
+    pub address: String,
+    pub preview: String,
+    pub timestamp: i64,
+    pub status: String,
+    pub topo: i64,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct WalletCreateOpenArgs<'a> {

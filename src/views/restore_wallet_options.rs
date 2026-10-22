@@ -1,41 +1,104 @@
 use crate::{database::db_fns::db_restore_wallet, Route};
-use dioxus::prelude::*;
+use crate::views::theme::{
+    grid_overlay, hex_pattern, BG, DIM, HAIR, MINT, MONO, PANEL, TEXT,
+};
+use dioxus::{logger::tracing::info, prelude::*};
+
+fn back_button_style() -> String {
+    format!(
+        "font-size:12px; color:{DIM}; background:none; border:1px solid {HAIR}; border-radius:6px; padding:8px 16px; cursor:pointer; font-family:{MONO}; letter-spacing:2px;"
+    )
+}
+
+fn field_style() -> String {
+    format!(
+        "width:100%; box-sizing:border-box; padding:12px 16px; background-color:{BG}; border:1px solid {HAIR}; border-radius:6px; color:{TEXT}; outline:none; font-size:14px; font-family:{MONO};"
+    )
+}
+
+fn field_label_style() -> String {
+    format!("font-size:9px; color:{DIM}; letter-spacing:2px; margin-bottom:8px;")
+}
+
+fn submit_style() -> String {
+    format!(
+        "padding:14px 24px; background:none; color:{MINT}; font-size:13px; font-weight:bold; border-radius:6px; border:1px solid {MINT}; cursor:pointer; font-family:{MONO}; letter-spacing:3px; box-shadow:0 0 12px rgba(100,255,218,0.12); width:100%;"
+    )
+}
+
+fn card_style() -> String {
+    format!(
+        "display:flex; flex-direction:column; gap:20px; width:100%; max-width:360px; background-color:{PANEL}; padding:28px; border-radius:8px; border:1px solid {HAIR}; position:relative; z-index:1;"
+    )
+}
+
+fn glow_title(size: u32, text: &'static str) -> Element {
+    rsx! {
+        h1 {
+            style: format!("font-size:{size}px; font-weight:bold; margin:0 0 10px 0; color:{MINT}; font-family:{MONO}; text-shadow:0 0 16px rgba(100,255,218,0.35); letter-spacing:4px; text-align:center;"),
+            "{text}"
+        }
+    }
+}
 
 #[component]
 pub fn RestoreWalletOptions() -> Element {
     let nav = navigator();
 
-    rsx!(
+    rsx! {
         div {
-            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
-            h1 {
-                style: "font-size:32px; font-weight:bold; margin-bottom:8px;",
-                "Xelite DX"
-            }
-            p { style: "color:#9ca3af; margin-bottom:40px;", "Wallet Setup" }
+            style: format!("position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:{BG}; color:{TEXT}; font-family:{MONO}; padding:24px; overflow:hidden;"),
 
-            button {
-                style: "width:100%; max-width:24rem; padding:12px 24px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
-                onclick: move |_| { nav.push(Route::CreateNewWallet {}); },
-                type: "button",
-                "+ Create New Wallet"
+            {grid_overlay()}
+
+            // Hex decoration floating right, as in 02_restore_wallet_options_desktop.svg
+            div {
+                style: "position:absolute; top:120px; right:80px; pointer-events:none;",
+                {hex_pattern(6, 2, 0.3)}
             }
 
-            button {
-                style: "width:100%; max-width:24rem; padding:12px 24px; background-color:#1f2937; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer; margin-top:16px;",
-                onclick: move |_| { nav.push(Route::RestoreFromSeed {}); },
-                type: "button",
-                "🌱 Restore from Seed Phrase"
-            }
+            div { style: "position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; width:100%;",
+                {glow_title(32, "WALLET SETUP")}
+                p {
+                    style: format!("color:{DIM}; margin:0 0 40px 0; font-size:10px; letter-spacing:3px;"),
+                    "CHOOSE YOUR APPROACH"
+                }
 
-            button {
-                style: "width:100%; max-width:24rem; padding:12px 24px; background-color:#1f2937; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer; margin-top:16px;",
-                onclick: move |_| { nav.push(Route::RestoreFromPrivateKey {}); },
-                type: "button",
-                "🔑 Restore from Private Key"
+                button {
+                    style: format!("width:100%; max-width:340px; padding:16px 20px; background-color:{PANEL}; color:{TEXT}; font-size:13px; font-weight:bold; border-radius:6px; border:1px solid {MINT}; cursor:pointer; font-family:{MONO}; text-align:left; margin-bottom:16px; box-shadow:0 0 12px rgba(100,255,218,0.12);"),
+                    onclick: move |_| { nav.push(Route::CreateNewWallet {}); },
+                    r#type: "button",
+                    div { style: "display:flex; align-items:center; gap:14px;",
+                        span { style: format!("color:{MINT}; font-size:18px;"), "+" }
+                        span { style: "font-weight:bold; letter-spacing:1px;", "CREATE NEW WALLET" }
+                    }
+                    p { style: format!("margin:6px 0 0 32px; color:{DIM}; font-size:9px; letter-spacing:1px;"), "Generate a fresh wallet with new keys" }
+                }
+
+                button {
+                    style: format!("width:100%; max-width:340px; padding:16px 20px; background-color:{PANEL}; color:{TEXT}; font-size:13px; font-weight:bold; border-radius:6px; border:1px solid {HAIR}; cursor:pointer; font-family:{MONO}; text-align:left; margin-bottom:16px;"),
+                    onclick: move |_| { nav.push(Route::RestoreFromSeed {}); },
+                    r#type: "button",
+                    div { style: "display:flex; align-items:center; gap:14px;",
+                        span { style: "color:#ffd700; font-size:18px;", "▣" }
+                        span { style: "font-weight:bold; letter-spacing:1px;", "RESTORE FROM SEED PHRASE" }
+                    }
+                    p { style: format!("margin:6px 0 0 32px; color:{DIM}; font-size:9px; letter-spacing:1px;"), "Recover wallet using 12 or 24-word seed" }
+                }
+
+                button {
+                    style: format!("width:100%; max-width:340px; padding:16px 20px; background-color:{PANEL}; color:{TEXT}; font-size:13px; font-weight:bold; border-radius:6px; border:1px solid {HAIR}; cursor:pointer; font-family:{MONO}; text-align:left;"),
+                    onclick: move |_| { nav.push(Route::RestoreFromPrivateKey {}); },
+                    r#type: "button",
+                    div { style: "display:flex; align-items:center; gap:14px;",
+                        span { style: "color:#ffd700; font-size:18px;", "⚿" }
+                        span { style: "font-weight:bold; letter-spacing:1px;", "RESTORE FROM PRIVATE KEY" }
+                    }
+                    p { style: format!("margin:6px 0 0 32px; color:{DIM}; font-size:9px; letter-spacing:1px;"), "Import wallet using raw private key" }
+                }
             }
         }
-    )
+    }
 }
 
 #[component]
@@ -57,56 +120,60 @@ pub fn CreateNewWallet() -> Element {
         }
     };
 
-    rsx!(
+    rsx! {
         div {
-            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
+            style: format!("position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:{BG}; color:{TEXT}; font-family:{MONO}; padding:24px; overflow:hidden;"),
 
+            {grid_overlay()}
+
+            // Back button
             button {
-                style: "color:#9ca3af; margin-bottom:24px; background:none; border:none; cursor:pointer; font-size:14px; align-self:flex-start; max-width:24rem; width:100%;",
+                style: format!("position:absolute; top:24px; left:24px; z-index:2; {}", back_button_style()),
                 onclick: move |_| { nav.push(Route::RestoreWalletOptions {}); },
-                type: "button",
-                "← Back"
+                r#type: "button",
+                "← BACK"
             }
 
-            h1 { style: "font-size:28px; font-weight:bold; margin-bottom:32px;", "Create New Wallet" }
+            div { style: "position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; width:100%;",
+                {glow_title(28, "CREATE NEW WALLET")}
+                p { style: format!("color:{DIM}; font-size:10px; letter-spacing:2px; margin:0 0 32px 0;"), "GENERATE A NEW ON-CHAIN IDENTITY" }
 
-            form {
-                style: "display:flex; flex-direction:column; gap:16px; width:100%; max-width:24rem; background-color:#111827; padding:24px; border-radius:12px;",
-                onsubmit: create_wallet,
+                form {
+                    style: card_style(),
+                    onsubmit: create_wallet,
 
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Wallet Name"
-                    input {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
-                        placeholder: "Enter a wallet name...",
-                        value: "{wallet_name}",
-                        oninput: move |event| wallet_name.set(event.value())
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "WALLET NAME" }
+                        input {
+                            style: field_style(),
+                            placeholder: "Enter a wallet name...",
+                            value: "{wallet_name}",
+                            oninput: move |event| wallet_name.set(event.value())
+                        }
+                    }
+
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "PASSWORD" }
+                        input {
+                            style: field_style(),
+                            r#type: "password",
+                            placeholder: "Enter wallet password...",
+                            value: "{wallet_password}",
+                            oninput: move |event| wallet_password.set(event.value())
+                        }
+                    }
+
+                    button { style: submit_style(), r#type: "submit", "CREATE WALLET" }
+
+                    // Status box (fixed in design 03, live here)
+                    div {
+                        style: format!("padding:12px; border:1px solid {HAIR}; border-radius:6px; background-color:{BG}; color:{DIM}; font-size:10px; letter-spacing:1px; text-align:center;"),
+                        if wallet_msg.read().is_empty() { "WALLET CREATION WILL BEGIN UPON SUBMISSION" } else { "{wallet_msg.read()}" }
                     }
                 }
-
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Password"
-                    input {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
-                        r#type: "password",
-                        placeholder: "Enter wallet password...",
-                        value: "{wallet_password}",
-                        oninput: move |event| wallet_password.set(event.value())
-                    }
-                }
-
-                button {
-                    style: "padding:12px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
-                    r#type: "submit",
-                    "Create Wallet"
-                }
-            }
-
-            if !wallet_msg.read().is_empty() {
-                p { style: "margin-top:16px; color:#d1d5db; text-align:center;", "{wallet_msg.read()}" }
             }
         }
-    )
+    }
 }
 
 #[component]
@@ -128,64 +195,63 @@ pub fn RestoreFromSeed() -> Element {
         }
     };
 
-    rsx!(
+    rsx! {
         div {
-            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
+            style: format!("position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:{BG}; color:{TEXT}; font-family:{MONO}; padding:24px; overflow:hidden;"),
+
+            {grid_overlay()}
 
             button {
-                style: "color:#9ca3af; margin-bottom:24px; background:none; border:none; cursor:pointer; font-size:14px; align-self:flex-start; max-width:24rem; width:100%;",
+                style: format!("position:absolute; top:24px; left:24px; z-index:2; {}", back_button_style()),
                 onclick: move |_| { nav.push(Route::RestoreWalletOptions {}); },
-                type: "button",
-                "← Back"
+                r#type: "button",
+                "← BACK"
             }
 
-            h1 { style: "font-size:28px; font-weight:bold; margin-bottom:8px;", "Restore from Seed Phrase" }
-            p { style: "color:#9ca3af; font-size:14px; margin-bottom:32px;", "Enter your 12 or 24-word seed phrase" }
+            div { style: "position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; width:100%;",
+                {glow_title(28, "RESTORE FROM SEED")}
+                p { style: format!("color:{DIM}; font-size:10px; letter-spacing:2px; margin:0 0 32px 0;"), "ENTER YOUR 12 OR 24-WORD SEED PHRASE" }
 
-            form {
-                style: "display:flex; flex-direction:column; gap:16px; width:100%; max-width:24rem; background-color:#111827; padding:24px; border-radius:12px;",
-                onsubmit: restore_wallet,
+                form {
+                    style: card_style(),
+                    onsubmit: restore_wallet,
 
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Wallet Name"
-                    input {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
-                        placeholder: "Enter a wallet name...",
-                        value: "{wallet_name}",
-                        oninput: move |event| wallet_name.set(event.value())
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "WALLET NAME" }
+                        input {
+                            style: field_style(),
+                            placeholder: "Enter a wallet name...",
+                            value: "{wallet_name}",
+                            oninput: move |event| wallet_name.set(event.value())
+                        }
                     }
-                }
 
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Password"
-                    input {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
-                        r#type: "password",
-                        placeholder: "Enter wallet password...",
-                        value: "{wallet_password}",
-                        oninput: move |event| wallet_password.set(event.value())
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "PASSWORD" }
+                        input {
+                            style: field_style(),
+                            r#type: "password",
+                            placeholder: "Enter wallet password...",
+                            value: "{wallet_password}",
+                            oninput: move |event| wallet_password.set(event.value())
+                        }
                     }
-                }
 
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Seed Phrase"
-                    textarea {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none; resize:vertical;",
-                        rows: 3,
-                        placeholder: "word1 word2 word3 ...",
-                        value: "{wallet_seed}",
-                        oninput: move |event| wallet_seed.set(event.value())
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "SEED PHRASE" }
+                        textarea {
+                            style: format!("{} height:90px; resize:vertical;", field_style()),
+                            placeholder: "word1 word2 word3 ...",
+                            value: "{wallet_seed}",
+                            oninput: move |event| wallet_seed.set(event.value())
+                        }
                     }
-                }
 
-                button {
-                    style: "padding:12px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
-                    r#type: "submit",
-                    "Restore Wallet"
+                    button { style: submit_style(), r#type: "submit", "RESTORE WALLET" }
                 }
             }
         }
-    )
+    }
 }
 
 #[component]
@@ -207,62 +273,67 @@ pub fn RestoreFromPrivateKey() -> Element {
         }
     };
 
-    rsx!(
+    rsx! {
         div {
-            style: "display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:#0a0a0a; color:#ffffff; padding:24px;",
+            style: format!("position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background-color:{BG}; color:{TEXT}; font-family:{MONO}; padding:24px; overflow:hidden;"),
+
+            {grid_overlay()}
 
             button {
-                style: "color:#9ca3af; margin-bottom:24px; background:none; border:none; cursor:pointer; font-size:14px; align-self:flex-start; max-width:24rem; width:100%;",
+                style: format!("position:absolute; top:24px; left:24px; z-index:2; {}", back_button_style()),
                 onclick: move |_| { nav.push(Route::RestoreWalletOptions {}); },
-                type: "button",
-                "← Back"
+                r#type: "button",
+                "← BACK"
             }
 
-            h1 { style: "font-size:28px; font-weight:bold; margin-bottom:8px;", "Restore from Private Key" }
-            p { style: "color:#9ca3af; font-size:14px; margin-bottom:32px;", "⚠️ Keep your private key secret" }
+            div { style: "position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; width:100%;",
+                {glow_title(28, "RESTORE FROM PRIVATE KEY")}
+                p { style: format!("color:{DIM}; font-size:10px; letter-spacing:2px; margin:0 0 24px 0;"), "IMPORT AN EXISTING RAW KEY" }
 
-            form {
-                style: "display:flex; flex-direction:column; gap:16px; width:100%; max-width:24rem; background-color:#111827; padding:24px; border-radius:12px;",
-                onsubmit: restore_wallet,
-
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Wallet Name"
-                    input {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
-                        placeholder: "Enter a wallet name...",
-                        value: "{wallet_name}",
-                        oninput: move |event| wallet_name.set(event.value())
-                    }
+                // Amber warning banner
+                div {
+                    style: format!("width:100%; max-width:360px; padding:12px; border:1px solid rgba(255,215,0,0.27); border-radius:6px; background-color:rgba(255,215,0,0.05); margin-bottom:28px; text-align:center; position:relative; z-index:1;"),
+                    p { style: "color:#ffd700; font-size:10px; letter-spacing:2px; margin:0;", "⚠ THIS KEY GRANTS FULL CONTROL OF FUNDS · NEVER SHARE IT" }
                 }
 
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Password"
-                    input {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
-                        r#type: "password",
-                        placeholder: "Enter wallet password...",
-                        value: "{wallet_password}",
-                        oninput: move |event| wallet_password.set(event.value())
-                    }
-                }
+                form {
+                    style: card_style(),
+                    onsubmit: restore_wallet,
 
-                label { style: "display:flex; flex-direction:column; gap:4px; font-size:14px; color:#d1d5db;",
-                    "Private Key"
-                    input {
-                        style: "margin-top:4px; padding:8px 16px; background-color:#1f2937; border:1px solid #374151; border-radius:8px; color:white; outline:none;",
-                        r#type: "password",
-                        placeholder: "Enter your private key...",
-                        value: "{wallet_private_key}",
-                        oninput: move |event| wallet_private_key.set(event.value())
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "WALLET NAME" }
+                        input {
+                            style: field_style(),
+                            placeholder: "Enter a wallet name...",
+                            value: "{wallet_name}",
+                            oninput: move |event| wallet_name.set(event.value())
+                        }
                     }
-                }
 
-                button {
-                    style: "padding:12px; background-color:#2563eb; color:white; font-size:18px; font-weight:500; border-radius:8px; border:none; cursor:pointer;",
-                    r#type: "submit",
-                    "Restore Wallet"
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "PASSWORD" }
+                        input {
+                            style: field_style(),
+                            r#type: "password",
+                            placeholder: "Enter wallet password...",
+                            value: "{wallet_password}",
+                            oninput: move |event| wallet_password.set(event.value())
+                        }
+                    }
+
+                    div { style: format!("display:flex; flex-direction:column; gap:8px;"),
+                        div { style: field_label_style(), "PRIVATE KEY" }
+                        textarea {
+                            style: format!("{} height:60px; resize:vertical;", field_style()),
+                            placeholder: "Enter your private key...",
+                            value: "{wallet_private_key}",
+                            oninput: move |event| wallet_private_key.set(event.value())
+                        }
+                    }
+
+                    button { style: submit_style(), r#type: "submit", "RESTORE WALLET" }
                 }
             }
         }
-    )
+    }
 }

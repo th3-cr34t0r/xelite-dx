@@ -1,266 +1,71 @@
-use std::str::SplitWhitespace;
-
 use crate::{
-    DB, Route, WALLET,
-    database::db_fns::{db_add_contact, db_read_contacts, db_store_init_message},
-    views::DbContact,
-    wallet::{utils::NODE_ENDPOINT, wallet_fns::wallet_get_seed},
+    Route, WALLET,
+    database::db_fns::db_add_contact,
+    views::{
+        chat_view::chat_shell,
+        sidebar::{SimpleSidebar, SimpleSidebarProps},
+        theme::{copy_to_clipboard, grid_overlay, AMBER, BG, DIM, HAIR, MINT, MONO, PANEL, SUB, TEXT},
+        DbContact,
+    },
+    wallet::wallet_fns::wallet_get_seed,
 };
+use crate::DB;
 use dioxus::{logger::tracing::info, prelude::*};
 
-fn copy_feedback_color(is_empty: bool) -> &'static str {
-    if is_empty { "transparent" } else { "#22c55e" }
-}
-
-fn copy_to_clipboard(text: &str) -> Result<(), String> {
-    // Use wl-copy directly — most reliable on Wayland
-    use std::io::Write;
-    
-    // Check if wl-copy is available
-    let output = std::process::Command::new("which")
-        .arg("wl-copy")
-        .output()
-        .map_err(|_| "wl-copy not found".to_string())?;
-    
-    if !output.status.success() {
-        // Fallback: try xclip for X11/Xwayland
-        let output = std::process::Command::new("which")
-            .arg("xclip")
-            .output()
-            .map_err(|_| "Neither wl-copy nor xclip found".to_string())?;
-        
-        if !output.status.success() {
-            return Err("No clipboard tool available (need wl-copy or xclip)".to_string());
-        }
-        
-        // Use xclip as fallback
-        return std::process::Command::new("xclip")
-            .args(["-selection", "clipboard"])
-            .stdin(std::process::Stdio::piped())
-            .spawn()
-            .and_then(|mut child| {
-                child.stdin.as_mut().unwrap().write_all(text.as_bytes())?;
-                child.wait()?;
-                Ok(())
-            })
-            .map_err(|e| format!("xclip failed: {}", e));
-    }
-    
-    // Use wl-copy
-    std::process::Command::new("wl-copy")
-        .stdin(std::process::Stdio::piped())
-        .spawn()
-        .and_then(|mut child| {
-            child.stdin.as_mut().unwrap().write_all(text.as_bytes())?;
-            child.wait()?;
-            Ok(())
-        })
-        .map_err(|e| format!("wl-copy failed: {}", e))
-}
-
+/// Home is a thin wrapper over the unified chat shell (empty state when no
+/// conversation is selected).
 #[component]
 pub fn Home() -> Element {
-    let nav = navigator();
+    chat_shell(None)
+}
 
-    let mut contacts_vec = use_signal(|| vec![DbContact::default()]);
-
-    let mut address = use_signal(|| String::new());
-    let mut full_address = use_signal(|| String::new());
-    let mut online_status = use_signal(|| String::new());
-    let mut balance = use_signal(|| String::new());
-    let mut topoheight = use_signal(|| 0);
-    let mut sidebar = use_signal(|| String::from("none"));
-    let mut copy_feedback = use_signal(|| String::new());
-
-    // read contacts from db
-    let mut db_contacts = use_resource(move || async move {
-        if let Some(db) = &*DB.read() {
-            db_read_contacts(db, &mut contacts_vec).await;
-        }
-    });
-
-    // get state info
-    use_future(move || async move {
-        if let Some(wallet) = &*WALLET.read() {
-            // get wallet address
-            let local_address = wallet.read().await.get_address().await;
-            *full_address.write() = local_address.clone();
-            let address_len = local_address.len();
-
-            // shorten it
-            *address.write() = format!(
-                "{}...{}",
-                &local_address[..10],
-                &local_address[address_len - 10..]
-            )
-            .to_string();
-
-            //set wallet online
-            match wallet
-                .write()
-                .await
-                .set_online(NODE_ENDPOINT.to_string())
-                .await
-            {
-                Ok(_) => online_status.set("Online".to_string()),
-                Err(e) => {
-                    if "Wallet is already in online mode" == e.to_string() {
-                        info!("set_online error: {e}");
-                        online_status.set("Online".to_string());
-                    } else {
-                        info!("set_online error: {e}");
-                        online_status.set("Offline".to_string());
-                    }
-                }
-            };
-
-            // get balance
-            if let Ok(ret_balance) = wallet.write().await.get_balance().await {
-                balance.set(ret_balance);
-            };
-
-            // get topoheight
-            topoheight.set(wallet.read().await.topoheight);
-
-            // poll for new app events
-            let mut refresh_db = false;
-            loop {
-                if let Some(wallet) = &*WALLET.read() {
-                    wallet.write().await.backgroud_daemon().await;
-
-                    // retrive the topoheight from the wallet
-                    topoheight.set(wallet.read().await.topoheight);
-
-                    // retrive the wallet balance from daemon updates
-                    balance.set(wallet.read().await.balance.clone());
-
-                    while let Some(tx) = wallet.write().await.rx_messages.pop() {
-                        // store the message
-                        db_store_init_message(tx).await;
-                        refresh_db = true;
-                    }
-
-                    // reload the db
-                    if refresh_db {
-                        db_contacts.restart();
-                        refresh_db = false
-                    }
-                }
-            }
-        }
-    });
-    rsx!(
-        div {
-            style: "position:absolute; background-color:#0a0a0a; color:#22c55e; width:320px; min-height:100vh; overflow-y:auto;",
-            id: "sidebar",
-            display: "{sidebar}",
-            div {
-                style: "padding-top:16px;",
-                div {
-                    style: "display:flex; justify-content:space-between;",
-                    h1 {
-                        style: "font-size:24px; font-weight:600; padding:16px;",
-                        "XELITE"
-                    }
-                    button {
-                        style: "padding:16px; font-size:24px; color:#22c55e;",
-                        id: "open-sidebar",
-                        onclick: move |_| sidebar.set("none".to_string()),
-                        "<"
-                    }
-                }
-                div {
-                    style: "margin:16px; padding:8px 0; font-size:14px; color:#22c55e;",
-                    if balance.read().is_empty() {
-                        span { style: "color:#f59e0b;", "Syncing..." }
-                    } else {
-                        "xel: {balance.read()}"
-                    }
-                }
-                ul {
-                    style: "margin:16px;",
-                    li {
-                        style: "margin-bottom:8px; width:100%;",
-                        button {
-                            style: "display:block; color:#22c55e; width:100%; padding:8px; border:1px solid #22c55e; border-radius:8px; background-color:#0a0a0a;",
-                            onclick: move |_| {
-                                let addr = full_address.read().clone();
-                                if addr.is_empty() {
-                                    copy_feedback.set("Address not loaded yet".to_string());
-                                    return;
-                                }
-                                match copy_to_clipboard(&addr) {
-                                    Ok(_) => copy_feedback.set("✓ Copied!".to_string()),
-                                    Err(e) => copy_feedback.set(format!("Error: {:?}", e)),
-                                }
-                            },
-                            "📋 Copy Address"
-                        }
-                    }
-                    li {
-                        style: "margin-bottom:8px; width:100%; text-align:center; min-height:20px;",
-                        color: "{copy_feedback_color(copy_feedback.read().is_empty())}",
-                        "{copy_feedback.read()}"
-                    }
-                    li { style: "margin-bottom:8px;", button { style: "display:block; color:#22c55e;", onclick: move |_| {nav.push(Route::ViewSeed {});},"View Seed" } }
-                    li { style: "margin-bottom:8px;", button { style: "display:block; color:#22c55e;", "Settings" } }
-                    li { style: "margin-bottom:8px;", button { style: "display:block; color:#22c55e;", "Info" } }
-                }
-                div {
-                    style: "position:absolute; bottom:0; left:0; margin:8px; font-size:12px; color:#166534;",
-                    "Xelite v0.0.1"
-                }
-            }
-        }
-
-        div {
-            style: "border:2px solid #16a34a; border-radius:12px; margin:16px;",
-            div {
-                style: "display:flex; justify-content:space-between; align-items:center;",
-                button {
-                    style: "font-size:20px; font-weight:600; color:#22c55e; padding:16px;",
-                    id: "open-sidebar",
-                    onclick: move |_| sidebar.set("block".to_string()),
-                    ">"
-                }
-                h1 {
-                    style: "font-size:20px; font-weight:600; color:#22c55e;",
-                    if *online_status.read() == "Online" {
-                        a { style: "" }
-                    } else {
-                        a { style: "" }
-                    },
-                    " {online_status.read()}"
-                }
-                h1 { style: "font-size:20px; font-weight:600; color:#22c55e;", " | " }
-                h1 { style: "font-size:20px; font-weight:600; color:#22c55e;", "{topoheight.read()}" }
-            }
-        }
-
-        // main
-        div {
-            style: "display:flex; flex-direction:column; padding:16px;",
-            for contact in contacts_vec.read().iter().cloned() {
-                // skip the default contact
-                if DbContact::default() != contact {
-                    button {
-                        style: "border:2px solid #16a34a; border-radius:12px; padding:16px; margin-bottom:16px; color:#22c55e;",
-                        onclick: move |_| { nav.push(Route::ChatView { name: contact.name.clone(), address: contact.address.clone() }); },
-                        "{contact.name}"
-                    }
-                }
-            }
-        }
-
-        div {
-            style: "position:absolute; right:0; bottom:0; margin:32px;",
-            button {
-                style: "border:2px solid #6ee7b7; border-radius:12px; width:64px; height:64px; background-color:#22c55e; color:black; font-size:32px; font-weight:bold;",
-                onclick: move |_| { nav.push(Route::AddContact {}); },
-                "+"
-            }
-        }
+fn field_style() -> String {
+    format!(
+        "width:100%; box-sizing:border-box; padding:14px 18px; background-color:{BG}; border:1px solid {HAIR}; border-radius:6px; color:{TEXT}; outline:none; font-size:16px; font-family:{MONO};"
     )
+}
+
+fn field_label_style() -> String {
+    format!("font-size:11px; color:{DIM}; letter-spacing:2px; margin-bottom:8px;")
+}
+
+fn submit_style() -> String {
+    format!(
+        "padding:16px 24px; background:none; color:{MINT}; font-size:14px; font-weight:bold; border-radius:6px; border:1px solid {MINT}; cursor:pointer; font-family:{MONO}; letter-spacing:3px; box-shadow:0 0 12px rgba(100,255,218,0.12); width:100%;"
+    )
+}
+
+fn page_main(
+    title: &'static str,
+    on_back: impl Fn() + 'static,
+    back: Element,
+    body: Element,
+) -> Element {
+    rsx! {
+        div {
+            style: format!("display:flex; min-height:100vh; background-color:{BG}; font-family:{MONO}; position:relative;"),
+            {grid_overlay()}
+            {back}
+            div {
+                style: format!("flex:1; min-width:0; display:flex; flex-direction:column; padding:24px 28px; position:relative; z-index:1;"),
+                div {
+                    style: format!("display:flex; align-items:center; gap:16px; margin-bottom:24px;"),
+                    button {
+                        style: format!("font-size:14px; color:{DIM}; background:none; border:1px solid {HAIR}; border-radius:6px; padding:10px 16px; cursor:pointer; font-family:{MONO}; letter-spacing:2px;"),
+                        onclick: move |_| on_back(),
+                        "←"
+                    }
+                    h1 {
+                        style: format!("font-size:18px; font-weight:bold; margin:0; color:{TEXT}; letter-spacing:3px; font-family:{MONO};"),
+                        "{title}"
+                    }
+                }
+                div { style: "flex:1; display:flex; align-items:center; justify-content:center;",
+                    {body}
+                }
+            }
+        }
+    }
 }
 
 #[allow(
@@ -277,7 +82,6 @@ pub fn AddContact() -> Element {
     let mut contact_ret_msg = use_signal(|| String::new());
 
     let add_contact = move |_: FormEvent| async move {
-        // add the entry to the local database
         let new_contact = DbContact {
             name: contact_name.read().clone(),
             address: contact_address.read().clone(),
@@ -307,68 +111,54 @@ pub fn AddContact() -> Element {
         }
     };
 
-    rsx!(
+    let body = rsx! {
         div {
-            style: "border:2px solid #16a34a; border-radius:12px; margin:16px;",
-            div {
-                style: "display:flex; justify-content:space-between; align-items:center;",
-                button {
-                    style: "font-size:20px; font-weight:600; color:#22c55e; padding:16px;",
-                    id: "open-sidebar",
-                    onclick: move |_| { nav.push(Route::Home {}); },
-                    "<"
-                }
-                h1 {
-                    style: "font-size:20px; font-weight:600; color:#22c55e;",
-                    "Add Contact"
-                }
-                h1 {
-                    style: "font-size:20px;",
-                    ""
-                }
-            }
-        }
-    div {
-        style: "height:100vh; display:flex; align-items:center; justify-content:center;",
-        form {
-            style: "padding:16px; width:100%; max-width:24rem;",
-            onsubmit: add_contact,
-            div {
-                style: "display:flex;",
-                input {
-                    id: "contact-name",
-                    style: "flex-grow: 1; border:2px solid #16a34a; border-radius:12px; padding:16px; margin-bottom:16px; color:#22c55e;",
-                    placeholder: "Enter contact name...",
-                    value: "{contact_name}",
-                    oninput: move |event| contact_name.set(event.value())
-                }
+            style: format!("display:flex; flex-direction:column; gap:18px; width:100%; max-width:440px; background-color:{PANEL}; padding:30px; border-radius:8px; border:1px solid {HAIR}; position:relative; z-index:1;"),
+            h2 {
+                style: format!("font-size:18px; font-weight:bold; margin:0; color:{MINT}; letter-spacing:4px; text-align:center; text-shadow:0 0 14px rgba(100,255,218,0.35);"),
+                "ADD CONTACT"
             }
             div {
-                style: "display:flex;",
-                input {
-                    id: "contat-address",
-                    style: "flex-grow: 1; border:2px solid #16a34a; border-radius:12px; padding:16px; margin-bottom:16px; color:#22c55e;",
-                    placeholder: "Enter a wallet address...",
-                    value: "{contact_address}",
-                    oninput: move |event| contact_address.set(event.value())
-                }
+                style: format!("font-size:11px; color:{DIM}; letter-spacing:2px; text-align:center; margin-bottom:6px;"),
+                "STORED IN YOUR ADDRESS BOOK · NEVER BROADCAST ON-CHAIN"
             }
-            div {
-                style: "display:flex; justify-content:center;",
-                button {
-                    style: "border:2px solid #6ee7b7; border-radius:12px; background-color:#22c55e; color:black; padding:16px;",
-                    r#type: "submit",
-                    "Add Contact"
-                }
-            }
-            div {
-                style: "color:#22c55e;",
-                "{contact_ret_msg.read()}"
-            }
-        }
-    }
 
-    )
+            form {
+                onsubmit: add_contact,
+                div { style: "margin-bottom:20px;",
+                    div { style: field_label_style(), "CONTACT NAME" }
+                    input {
+                        style: field_style(),
+                        placeholder: "Enter contact name...",
+                        value: "{contact_name}",
+                        oninput: move |event| contact_name.set(event.value()),
+                    }
+                }
+                div { style: "margin-bottom:20px;",
+                    div { style: field_label_style(), "WALLET ADDRESS" }
+                    input {
+                        style: field_style(),
+                        placeholder: "Enter a wallet address...",
+                        value: "{contact_address}",
+                        oninput: move |event| contact_address.set(event.value()),
+                    }
+                }
+                div { style: "display:flex; justify-content:center;",
+                    button { style: submit_style(), r#type: "submit", "ADD CONTACT" }
+                }
+                div {
+                    style: format!("margin-top:16px; padding:10px; border:1px solid {HAIR}; border-radius:6px; color:{AMBER}; font-size:13px; text-align:center; min-height:18px;"),
+                    "{contact_ret_msg.read()}"
+                }
+            }
+        }
+    };
+
+    let back = rsx! {
+        {SimpleSidebar(SimpleSidebarProps { subtitle: "v0.0.1 · ADD CONTACT".to_string() })}
+    };
+
+    page_main("ADD CONTACT", move || { nav.push(Route::Home {}); }, back, body)
 }
 
 #[allow(
@@ -382,84 +172,94 @@ pub fn ViewSeed() -> Element {
 
     let mut user_password = use_signal(|| String::new());
     let mut seed_phrase = use_signal(|| String::new());
+    let mut copy_feedback = use_signal(|| String::new());
 
     let get_seed_phrase = move |_: FormEvent| async move {
         let entered_password = user_password.read().clone();
 
         match &*DB.read() {
-            Some(db) => {
-                wallet_get_seed(db, entered_password, &mut seed_phrase).await;
-            }
+            Some(db) => wallet_get_seed(db, entered_password, &mut seed_phrase).await,
             None => {
                 info!("DB not accessible");
                 seed_phrase.set("DB not accessible".to_string());
             }
+        };
+    };
+
+    let seed = seed_phrase();
+    let words: Vec<String> = seed.split_whitespace().map(|w| w.to_string()).collect();
+
+    let body = rsx! {
+        div {
+            style: format!("display:flex; flex-direction:column; gap:18px; width:100%; max-width:480px; background-color:{PANEL}; padding:30px; border-radius:8px; border:1px solid rgba(255,215,0,0.27); position:relative; z-index:1;"),
+            // Warning banner
+            div {
+                style: format!("padding:12px 14px; border:1px solid rgba(255,215,0,0.27); border-radius:6px; background-color:rgba(255,215,0,0.05); text-align:center;"),
+                span { style: format!("color:{AMBER}; font-size:12px; letter-spacing:2px;"), "⚠️ KEEP YOUR SEED PHRASE SECRET AND SECURE" }
+            }
+
+            // Seed display
+            if seed.is_empty() {
+                div {
+                    style: format!("padding:22px; text-align:center; font-size:13px; color:{DIM}; letter-spacing:2px; border:1px dashed {HAIR}; border-radius:6px;"),
+                    "ENCRYPTED · ENTER PASSWORD TO DECRYPT"
+                }
+            } else if words.len() < 12 {
+                // error / unexpected payload — show raw
+                div {
+                    style: format!("padding:14px; border:1px solid rgba(255,215,0,0.27); border-radius:6px; color:{AMBER}; font-size:14px; text-align:center;"),
+                    "{seed}"
+                }
+            } else {
+                div {
+                    style: "display:grid; grid-template-columns:repeat(3,1fr); gap:10px;",
+                    for (i, word) in words.iter().enumerate() {
+                        div {
+                            style: format!("padding:12px; border:1px solid {HAIR}; border-radius:6px; background-color:{BG}; font-size:14px;"),
+                            span { style: format!("color:{DIM}; margin-right:8px;"), "{i+1}." }
+                            span { style: format!("color:{TEXT};"), "{word}" }
+                        }
+                    }
+                }
+                div { style: "display:flex; align-items:center; gap:12px;",
+                    div {
+                        style: format!("flex:1; padding:12px 14px; border-radius:6px; background-color:{BG}; border:1px solid {MINT}; cursor:pointer; text-align:center;"),
+                        onclick: move |_| {
+                            match copy_to_clipboard(&seed) {
+                                Ok(_) => copy_feedback.set("✓ Copied!".to_string()),
+                                Err(e) => copy_feedback.set(format!("Error: {:?}", e)),
+                            }
+                        },
+                        span { style: format!("color:{MINT}; font-size:13px; letter-spacing:2px;"), "📋 COPY SEED" }
+                    }
+                    span { style: format!("font-size:12px; color:{DIM}; min-width:70px;"), "{copy_feedback.read()}" }
+                }
+            }
+
+            // Password form
+            form {
+                onsubmit: get_seed_phrase,
+                div { style: "margin-bottom:16px;",
+                    div { style: field_label_style(), "ACCOUNT PASSWORD" }
+                    input {
+                        style: field_style(),
+                        placeholder: "Enter account password...",
+                        value: "{user_password}",
+                        oninput: move |event| user_password.set(event.value()),
+                    }
+                }
+                button { style: submit_style(), r#type: "submit", "GET SEED" }
+            }
+            div {
+                style: format!("font-size:11px; color:{SUB}; letter-spacing:2px; text-align:center;"),
+                "DECRYPTS LOCALLY · NEVER LEAVES THIS DEVICE"
+            }
         }
     };
 
-    rsx!(
-          div {
-              style: "border:2px solid #16a34a; border-radius:12px; margin:16px;",
-              div {
-                  style: "display:flex; justify-content:space-between; align-items:center;",
-                  button {
-                      style: "font-size:20px; font-weight:600; color:#22c55e; padding:16px;",
-                      id: "go-home",
-                      onclick: move |_| { nav.push(Route::Home {}); },
-                      "<"
-                  }
-                  h1 {
-                      style: "font-size:20px; font-weight:600; color:#22c55e;",
-                      "Get Seed Phrase"
-                  }
-                  h1 {
-                      style: "font-size:20px;",
-                      ""
-                  }
-              }
-          }
-      div {
-          style: "margin:16px; display:grid; grid-template-columns:repeat(3, 1fr); gap:16px;",
-          if seed_phrase().len() < 100 && !seed_phrase().is_empty() {
-              div {
-                  style: "grid-column:span 3; justify-self:center; border:2px solid #16a34a; border-radius:12px; padding:8px; margin-bottom:16px; color:#22c55e;",
-                  "{seed_phrase()}"
-              }
-          }
-          else {
-               for (i, word) in seed_phrase().split_whitespace().enumerate() {
-                   div {
-                       style: "border:2px solid #16a34a; border-radius:12px; padding:8px; margin-bottom:16px; color:#22c55e;",
-                       "{i}. {word}"
-                   }
-               }
-          }
-      }
+    let back = rsx! {
+        {SimpleSidebar(SimpleSidebarProps { subtitle: "v0.0.1 · VIEW SEED".to_string() })}
+    };
 
-      div {
-          style: "height:100vh; display:flex; align-items:center; justify-content:center;",
-          form {
-               style: "padding:16px; width:100%; max-width:24rem;",
-               onsubmit: get_seed_phrase,
-               div {
-                   style: "display:flex;",
-                   input {
-                         id: "account-password",
-                         style: "flex-grow: 1; border:2px solid #16a34a; border-radius:12px; padding:16px; margin-bottom:16px; color:#22c55e;",
-                         placeholder: "Enter account password...",
-                         value: "{user_password}",
-                         oninput: move |event| user_password.set(event.value())
-                   }
-               }
-               div {
-                   style: "display:flex; justify-content:center;",
-                   button {
-                          style: "border:2px solid #6ee7b7; border-radius:12px; background-color:#22c55e; color:black; padding:16px;",
-                          r#type: "submit",
-                          "Get Seed"
-                   }
-               }
-           }
-      }
-    )
+    page_main("GET SEED PHRASE", move || { nav.push(Route::Home {}); }, back, body)
 }

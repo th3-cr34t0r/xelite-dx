@@ -530,3 +530,39 @@ pub async fn db_read_contacts(db: &SqlitePool, contacts_vec: &mut Signal<Vec<DbC
         }
     }
 }
+
+/// Fresh contact list (no accumulation into a Signal)
+pub async fn db_read_contacts_list(db: &SqlitePool) -> Vec<DbContact> {
+    // create base table if it does not exist
+    query("CREATE TABLE IF NOT EXISTS contacts ( name TEXT NOT NULL, address TEXT NOT NULL )")
+        .execute(&*db)
+        .await
+        .ok();
+
+    query_as("SELECT name, address FROM contacts")
+        .fetch_all(&*db)
+        .await
+        .unwrap_or_default()
+}
+
+/// Last message preview for a contact: (message, timestamp, status, topoheight)
+pub async fn db_read_last_message(
+    db: &SqlitePool,
+    address: String,
+) -> Option<(String, i64, String, i64)> {
+    use sqlx::Row;
+    let row = query(
+        "SELECT message, timestamp, status, topoheight FROM Message WHERE address = ? AND message IS NOT NULL ORDER BY timestamp DESC LIMIT 1",
+    )
+    .bind(address)
+    .fetch_optional(&*db)
+    .await
+    .ok()
+    .flatten()?;
+
+    let message: Option<String> = row.try_get("message").ok().flatten()?;
+    let timestamp: i64 = row.try_get("timestamp").unwrap_or(0);
+    let status: String = row.try_get("status").unwrap_or_default();
+    let topoheight: i64 = row.try_get("topoheight").unwrap_or(0);
+    Some((message?, timestamp, status, topoheight))
+}
